@@ -1,0 +1,5 @@
+recursive-include py2jdbc *.py
+include tests/*
+include README.md
+include LICENSE.txt
+include MANIFEST.in

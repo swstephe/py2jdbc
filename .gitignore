@@ -1,0 +1,11 @@
+setup.cfg
+MANIFEST
+build
+dist
+*.pdb
+*.pyc
+tmp
+TAGS
+p2jdbc.egg-info
+p2jdbc.conf
+.idea
