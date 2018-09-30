@@ -1,10 +1,11 @@
 # -*- coding: utf8 -*-
 import inspect
 import logging
+import six
 import sys
 import threading
-from . import jni
-from . import sig
+from py2jdbc import jni
+from py2jdbc import sig
 
 
 log = logging.getLogger(__name__)
@@ -27,7 +28,18 @@ class JavaException(Exception):
         :param e: jthrowable
         :return: JavaException with message initialized to stack trace strings.
         """
-        throwable = env.classes['java.lang.Throwable'](e.throwable)
+        for cn in (
+            'java.sql.SQLException',
+            'java.lang.Exception',
+            'java.lang.Throwable'
+        ):
+            if cn in env.classes:
+                base_class = env.classes[cn]
+                if env.env.IsInstanceOf(e.throwable, base_class.cls):
+                    throwable = base_class(e.throwable)
+                    break
+        else:
+            raise RuntimeError("exception raised with %s class" % jni.get_class_name(e.throwable))
         ste = env.classes['java.lang.StackTraceElement']
         message = ['Exception in thread "main" {}'.format(throwable.getMessage())]
         log.info('message=%r', message)
@@ -36,7 +48,8 @@ class JavaException(Exception):
             name = ste(elem).getClassName()
             log.info("name=%r", name)
             message.append(name)
-        raise cls('\n    at '.join(message))
+        message = '\n    at '.join(message)
+        raise cls(message)
 
     def __init__(self, message):
         self.message = message
@@ -70,10 +83,22 @@ class ThreadEnv(object):
         :param kwargs: jni.JNIEnv.get_env arguments, (like classpath, verbose, etc.)
         """
         self.env = jni.get_env(**kwargs)
-        self.classes = {}
+        self.classes = {
+            'java.lang.Object': Object(self),
+            'java.lang.Throwable': Throwable(self),
+            'java.lang.StackTraceElement': StackTraceElement(self)
+        }
+        loaded = {'Object', 'Throwable', 'StackTraceElement'}
         for k, v in inspect.getmembers(sys.modules[__name__], class_predicate):
+            if v.__name__ in loaded:
+                continue
             cls = v(self)
             self.classes[cls.class_name] = cls
+            loaded.add(v.__name__)
+
+    def __del__(self):
+        for cls in self.classes:
+            del cls
 
     @classmethod
     def instance(cls, **kwargs):
@@ -102,7 +127,7 @@ class ThreadEnv(object):
         try:
             jni.check_exception(self.env)
         except jni.JavaException as e:
-            JavaException.from_jni_exception(self.env, e)
+            JavaException.from_jni_exception(self, e)
 
 
 def get_env(**kwargs):
@@ -196,7 +221,7 @@ class JMethod(JBase):
         """
         Construct a JMethod instance.
 
-        A JField is created when the class is loaded, then attached to instances
+        A JMethod is created when the class is loaded, then attached to instances
         as they are wrapped.
 
         :param cls: a JClass wrapper subclass
@@ -213,7 +238,17 @@ class JMethod(JBase):
                 name,
                 signature
             ))
-        self.argtypes, self.restype = sig.method_signature(self.env, signature)
+        self.argtypes, self.restype = self.get_signature(signature)
+
+    def get_signature(self, signature):
+        """
+        Overridable function that returns handlers for result and argument
+        types for this method.
+
+        :param signature: method signature
+        :return: argtypes and restype from signature
+        """
+        return sig.method_signature(self.env, signature)
 
     def __call__(self, obj, *args):
         """
@@ -229,6 +264,50 @@ class JMethod(JBase):
         except jni.JavaException as e:
             raise JavaException.from_jni_exception(self.cls.env, e)
         return value
+
+
+class JConstructor(JMethod):
+    """
+    Wraps a java object constructor method
+    """
+    def __init__(self, cls, signature):
+        """
+        Create an instance of a constructor.
+        When called, it will craeate an object of the class.
+
+        :param cls: a JClass wrapper subclass
+        :param signature: the Java signature of the constructor, (just the arguments)
+        :raises: RuntimeError if no matching constructor was found
+        """
+        super(JConstructor, self).__init__(cls, '<init>', '({})V'.format(signature))
+
+    def get_signature(self, signature):
+        """
+        Function that returns handlers for result and argument
+        types for this constructor.
+
+        :param signature: the full singature
+        :return: argtypes and restype
+        """
+        return sig.constructor_signature(
+            self.env,
+            self.cls.class_name,
+            signature[1:-2]
+        )
+
+    def __call__(self, *args):
+        """
+        Call the constructor and create an object instance with Python arguments.
+
+        :param args: Python value arguments
+        :return: the resulting object instance handle
+        """
+        try:
+            obj = self.restype.new(self.cls.cls, self.mid, self.argtypes, *args)
+            self.cls.env.check_exception()
+        except jni.JavaException as e:
+            raise JavaException.from_jni_exception(self.cls.env, e)
+        return self.cls(obj)
 
 
 class JStaticMethod(JBase):
@@ -338,7 +417,16 @@ class JClass(object):
         """
         return JStaticMethod(self, name, signature)
 
-    def __call__(self, obj):
+    def constructor(self, signature=''):
+        """
+        Link a JConstructor declaration to the current class.
+
+        :param signature: the constructor signature (just args)
+        :return: the constructor handler wrapper
+        """
+        return JConstructor(self, signature)
+
+    def __call__(self, *values, obj=None):
         """
         By convention, we create instances of classes by calling the
         class wrapper.  So something like this:
@@ -364,15 +452,24 @@ class Object(JClass):
         def __init__(self, cls, obj):
             self.cls = cls
             self.obj = obj
+            self.equals = lambda *a, o=obj: cls.equals(o, *a)
+            self.hashCode = lambda o=obj: cls.hashCode(o)
             self.toString = lambda o=obj: cls.toString(o)
+            self.getClass = lambda o=obj: cls.getClass(o)
 
         @property
         def env(self):
             return self.cls.env
 
+        def __eq__(self, other):
+            return self.equals(other.obj)
+
     def __init__(self, env, class_name='java.lang.Object'):
         super(Object, self).__init__(env, class_name=class_name)
+        self.equals = self.method('equals', '(Ljava/lang/Object;)Z')
+        self.getClass = self.method('getClass', '()Ljava/lang/Class;')
         self.toString = self.method('toString', '()Ljava/lang/String;')
+        self.hashCode = self.method('hashCode', '()I')
 
     def __call__(self, *args):
         """
@@ -397,9 +494,24 @@ class Class(Object):
             super(Class.Instance, self).__init__(cls, obj)
             self.getName = lambda o=obj: cls.getName(o)
 
+        def getDeclaredField(self, name):
+            return ReflectField(self.cls.getDeclaredField(self.obj, name))
+
+        def getDeclaredMethod(self, name, *classes):
+            _classes = classes
+            return ReflectMethod(self.cls.getDeclaredMethod(self.obj, name, _classes))
+
     def __init__(self, env, class_name='java.lang.Class'):
         super(Class, self).__init__(env, class_name=class_name)
         self._forName = self.static_method('forName', '(Ljava/lang/String;)Ljava/lang/Class;')
+        self.getDeclaredField = self.method(
+            'getDeclaredField',
+            '(Ljava/lang/String;)Ljava/lang/reflect/Field;'
+        )
+        self.getDeclaredMethod = self.method(
+            'getDeclaredMethod',
+            '(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;'
+        )
         self.getName = self.method('getName', '()Ljava/lang/String;')
 
     def __call__(self, *args):
@@ -413,12 +525,31 @@ class Class(Object):
         return self(self._forName(name))
 
 
-class Number(Object):
-    """
-    Wrapper for java.lang.Number
-    """
-    def __init__(self, env, class_name='java.lang.Number'):
-        super(Number, self).__init__(env, class_name=class_name)
+class ReflectField(Object):
+    class Instance(Object.Instance):
+        def __init__(self, cls, obj):
+            super(ReflectField.Instance, self).__init__(cls, obj)
+            self.getName = lambda o=obj: cls.getName(o)
+            self.getType = lambda o=obj: cls.getType(o)
+
+    def __init__(self, env, class_name='java.lang.reflect.Field'):
+        super(ReflectField, self).__init__(env, class_name=class_name)
+        self.getName = self.method('getName', '()Ljava/lang/String;')
+        self.getType = self.method('getType', '()Ljava/lang/Class;')
+
+
+class ReflectMethod(Object):
+    class Instance(Object.Instance):
+        def __init__(self, cls, obj):
+            self.getName = lambda o=obj: cls.getName(o)
+            self.getReturnType = lambda o=obj: cls.getReturnType(o)
+            self.getParameterTypes = lambda o=obj: cls.getParameterTypes(o)
+
+    def __init__(self, env, class_name='java.lang.reflect.Method'):
+        super(ReflectMethod, self).__init__(env, class_name=class_name)
+        self.getName = self.method('getName', '()Ljava/lang/String;')
+        self.getReturnType = self.method('getReturnType', '()Ljava/lang/Class;')
+        self.getParameterTypes = self.method('getParameterTypes', '()[Ljava/lang/Class;')
 
 
 class StackTraceElement(Object):
@@ -484,37 +615,484 @@ class Throwable(Object):
         return Throwable.Instance(self, *args)
 
 
+class LangException(Throwable):
+    """
+    Wrapper for java.lang.Exception class
+    """
+    class Instance(Throwable.Instance):
+        """
+        Wrapper for java.lang.Exception object instance
+        """
+        def __init__(self, cls, obj):
+            super(LangException.Instance, self).__init__(cls, obj)
+
+    def __init__(self, env, class_name='java.lang.Exception'):
+        super(LangException, self).__init__(env, class_name=class_name)
+
+    def __call__(self, *args):
+        return LangException.Instance(self, *args)
+
+
+class Boolean(Object):
+    """
+    Wrapper for java.lang.Boolean class
+    """
+    class Instance(Object.Instance):
+        """
+        Wrapper for java.lang.Boolean object instance
+        """
+        def __init__(self, cls, obj):
+            super(Boolean.Instance, self).__init__(cls, obj)
+            self.booleanValue = lambda o=obj: cls.booleanValue(o)
+
+        def __bool__(self):
+            return self.booleanValue()
+
+    def __init__(self, env, class_name='java.lang.Boolean'):
+        assert isinstance(env, ThreadEnv)
+        super(Boolean, self).__init__(env, class_name=class_name)
+        self.FALSE = self(self.static_field('FALSE', 'Ljava/lang/Boolean;'))
+        self.TRUE = self(self.static_field('TRUE', 'Ljava/lang/Boolean;'))
+        self.cons_s = self.constructor('Ljava/lang/String;')
+        self.cons_z = self.constructor('Z')
+        self.booleanValue = self.method('booleanValue', '()Z')
+
+    def __call__(self, *args):
+        return Boolean.Instance(self, *args)
+
+    def new(self, *args):
+        if len(args) != 1:
+            raise ValueError("expected only one argument")
+        if isinstance(args[0], six.string_types):
+            return self.cons_s(*args)
+        else:
+            return self.cons_z(*args)
+
+
+class Character(Object):
+    """
+    Wrapper for java.lang.Character
+    """
+    class Instance(Object.Instance):
+        def __init__(self, cls, obj):
+            super(Character.Instance, self).__init__(cls, obj)
+            self.charValue = lambda o=obj: cls.charValue(o)
+
+    def __init__(self, env, class_name='java.lang.Character'):
+        super(Character, self).__init__(env, class_name=class_name)
+        self.cons = self.constructor('C')
+        self.charValue = self.method('charValue', '()C')
+
+    def __call__(self, *args):
+        return Character.Instance(self, *args)
+
+    def new(self, *args):
+        if len(args) != 1:
+            raise ValueError("expected only one argument")
+        return self.cons(*args)
+
+
+class Number(Object):
+    """
+    Wrapper for java.lang.Number class
+    """
+    class Instance(Object.Instance):
+        """
+        Wrapper for java.lang.Number object instance
+        """
+        def __init__(self, cls, obj):
+            super(Number.Instance, self).__init__(cls, obj)
+            self.intValue = lambda o=obj: cls.intValue(o)
+            self.longValue = lambda o=obj: cls.longValue(o)
+            self.floatValue = lambda o=obj: cls.floatValue(o)
+            self.doubleValue = lambda o=obj: cls.doubleValue(o)
+            self.byteValue = lambda o=obj: cls.byteValue(o)
+            self.shortValue = lambda o=obj: cls.shortValue(o)
+
+        def __int__(self):
+            return self.longValue()
+
+        def __float__(self):
+            return self.doubleValue()
+
+    def __init__(self, env, class_name='java.lang.Number'):
+        super(Number, self).__init__(env, class_name=class_name)
+        self.intValue = self.method('intValue', '()I')
+        self.longValue = self.method('longValue', '()J')
+        self.floatValue = self.method('floatValue', '()F')
+        self.doubleValue = self.method('doubleValue', '()D')
+        self.byteValue = self.method('byteValue', '()B')
+        self.shortValue = self.method('shortValue', '()S')
+
+    def __call__(self, *args):
+        return Number.Instance(self, *args)
+
+
+class Byte(Number):
+    """
+    Wrapper for java.lang.Byte class
+    """
+    class Instance(Number.Instance):
+        """
+        Wrapper for java.lang.Byte object instance
+        """
+        def __init__(self, cls, obj):
+            super(Byte.Instance, self).__init__(cls, obj)
+
+        def __int__(self):
+            return self.byteValue()
+
+    def __init__(self, env, class_name='java.lang.Byte'):
+        super(Byte, self).__init__(env, class_name=class_name)
+        self.MAX_VALUE = self.static_field('MAX_VALUE', 'B')
+        self.MIN_VALUE = self.static_field('MIN_VALUE', 'B')
+        self.SIZE = self.static_field('SIZE', 'I')
+        self.cons_s = self.constructor('Ljava/lang/String;')
+        self.cons_b = self.constructor('B')
+        self.compare = self.static_method('compare', '(BB)I')
+
+    def __call__(self, *args):
+        return Byte.Instance(self, *args)
+
+    def new(self, *args):
+        if len(args) != 1:
+            raise ValueError("expected only one argument")
+        if isinstance(args[0], six.string_types):
+            return self.cons_s(*args)
+        else:
+            return self.cons_b(*args)
+
+
+class Short(Number):
+    """
+    Wrapper for java.lang.Short class
+    """
+    class Instance(Number.Instance):
+        """
+        Wrapper for java.lang.Short object instance
+        """
+        def __init__(self, cls, obj):
+            super(Short.Instance, self).__init__(cls, obj)
+
+        def __int__(self):
+            return self.shortValue()
+
+    def __init__(self, env, class_name='java.lang.Short'):
+        super(Short, self).__init__(env, class_name=class_name)
+        self.MAX_VALUE = self.static_field('MAX_VALUE', 'S')
+        self.MIN_VALUE = self.static_field('MIN_VALUE', 'S')
+        self.SIZE = self.static_field('SIZE', 'I')
+        self.cons_str = self.constructor('Ljava/lang/String;')
+        self.cons_s = self.constructor('S')
+
+    def __call__(self, *args):
+        return Short.Instance(self, *args)
+
+    def new(self, *args):
+        if len(args) != 1:
+            raise ValueError("expected only one argument")
+        if isinstance(args[0], six.string_types):
+            return self.cons_str(*args)
+        else:
+            return self.cons_s(*args)
+
+
+class Integer(Number):
+    """
+    Wrapper for java.lang.Integer class
+    """
+    class Instance(Number.Instance):
+        """
+        Wrapper for java.lang.Integer object instance
+        """
+        def __init__(self, cls, obj):
+            super(Integer.Instance, self).__init__(cls, obj)
+
+        def __int__(self):
+            return self.intValue()
+
+    def __init__(self, env, class_name='java.lang.Integer'):
+        super(Integer, self).__init__(env, class_name=class_name)
+        self.MAX_VALUE = self.static_field('MAX_VALUE', 'I')
+        self.MIN_VALUE = self.static_field('MIN_VALUE', 'I')
+        self.SIZE = self.static_field('SIZE', 'I')
+        self.cons_s = self.constructor('Ljava/lang/String;')
+        self.cons_i = self.constructor('I')
+
+    def __call__(self, *args):
+        return Integer.Instance(self, *args)
+
+    def new(self, *args):
+        if len(args) != 1:
+            raise ValueError("expected only one argument")
+        if isinstance(args[0], six.string_types):
+            return self.cons_s(*args)
+        else:
+            return self.cons_i(*args)
+
+
+class Long(Number):
+    """
+    Wrapper for java.lang.Long class
+    """
+    class Instance(Number.Instance):
+        """
+        Wrapper for java.lang.Integer object instance
+        """
+        def __init__(self, cls, obj):
+            super(Long.Instance, self).__init__(cls, obj)
+
+        def __int__(self):
+            return self.longValue()
+
+    def __init__(self, env, class_name='java.lang.Long'):
+        super(Long, self).__init__(env, class_name=class_name)
+        self.MAX_VALUE = self.static_field('MAX_VALUE', 'J')
+        self.MIN_VALUE = self.static_field('MIN_VALUE', 'J')
+        self.SIZE = self.static_field('SIZE', 'I')
+        self.cons_s = self.constructor('Ljava/lang/String;')
+        self.cons_j = self.constructor('J')
+
+    def __call__(self, *args):
+        return Long.Instance(self, *args)
+
+    def new(self, *args):
+        if len(args) != 1:
+            raise ValueError("expected only one argument")
+        if isinstance(args[0], six.string_types):
+            return self.cons_s(*args)
+        else:
+            return self.cons_j(*args)
+
+
+class Float(Number):
+    """
+    Wrapper for java.lang.Float class
+    """
+    class Instance(Number.Instance):
+        """
+        Wrapper for java.lang.Float object instance
+        """
+        def __init__(self, cls, obj):
+            super(Float.Instance, self).__init__(cls, obj)
+
+        def __float__(self):
+            return self.floatValue()
+
+    def __init__(self, env, class_name='java.lang.Float'):
+        super(Float, self).__init__(env, class_name=class_name)
+        self.MAX_EXPONENT = self.static_field('MAX_EXPONENT', 'I')
+        self.MAX_VALUE = self.static_field('MAX_VALUE', 'F')
+        self.MIN_EXPONENT = self.static_field('MIN_EXPONENT', 'I')
+        self.MIN_NORMAL = self.static_field('MIN_NORMAL', 'F')
+        self.MIN_VALUE = self.static_field('MIN_VALUE', 'F')
+        self.NaN = self.static_field('NaN', 'F')
+        self.NEGATIVE_INFINITY = self.static_field('NEGATIVE_INFINITY', 'F')
+        self.POSITIVE_INFINITY = self.static_field('POSITIVE_INFINITY', 'F')
+        self.SIZE = self.static_field('SIZE', 'I')
+        self.cons_d = self.constructor('D')
+        self.cons_s = self.constructor('Ljava/lang/String;')
+
+    def __call__(self, *args):
+        return Float.Instance(self, *args)
+
+    def new(self, *args):
+        if len(args) != 1:
+            raise ValueError("expected only one argument")
+        if isinstance(args[0], six.string_types):
+            return self.cons_s(*args)
+        else:
+            return self.cons_d(*args)
+
+
+class Double(Number):
+    """
+    Wrapper for java.lang.Double class
+    """
+    class Instance(Number.Instance):
+        """
+        Wrapper for java.lang.Double object instance
+        """
+        def __init__(self, cls, obj):
+            super(Double.Instance, self).__init__(cls, obj)
+
+        def __float__(self):
+            return self.doubleValue()
+
+    def __init__(self, env, class_name='java.lang.Double'):
+        super(Double, self).__init__(env, class_name=class_name)
+        self.MAX_EXPONENT = self.static_field('MAX_EXPONENT', 'I')
+        self.MAX_VALUE = self.static_field('MAX_VALUE', 'D')
+        self.MIN_EXPONENT = self.static_field('MIN_EXPONENT', 'I')
+        self.MIN_NORMAL = self.static_field('MIN_NORMAL', 'D')
+        self.MIN_VALUE = self.static_field('MIN_VALUE', 'D')
+        self.NaN = self.static_field('NaN', 'D')
+        self.NEGATIVE_INFINITY = self.static_field('NEGATIVE_INFINITY', 'D')
+        self.POSITIVE_INFINITY = self.static_field('POSITIVE_INFINITY', 'D')
+        self.SIZE = self.static_field('SIZE', 'I')
+        self.cons_d = self.constructor('D')
+        self.cons_s = self.constructor('Ljava/lang/String;')
+
+    def __call__(self, *args):
+        return Double.Instance(self, *args)
+
+    def new(self, *args):
+        if len(args) != 1:
+            raise ValueError("expected only one argument")
+        if isinstance(args[0], six.string_types):
+            return self.cons_s(*args)
+        else:
+            return self.cons_d(*args)
+
+
 class BigDecimal(Number):
     """
-    Wrapper for java.lang.BigDecimal java class
+    Wrapper for java.math.BigDecimal java class
     """
+    class Instance(Number.Instance):
+        def __init__(self, cls, obj):
+            super(BigDecimal.Instance, self).__init__(cls, obj)
+            self.abs = lambda o=obj: cls.abs(o)
+
+        def __abs__(self):
+            return self.abs()
+
+        def __float__(self):
+            return self.doubleValue()
+
     def __init__(self, env, class_name='java.math.BigDecimal'):
         super(BigDecimal, self).__init__(env, class_name=class_name)
+        self._ONE = self.static_field('ONE', 'Ljava/math/BigDecimal;')
+        self.ROUND_CEILING = self.static_field('ROUND_CEILING', 'I')
+        self.ROUND_DOWN = self.static_field('ROUND_DOWN', 'I')
+        self.ROUND_FLOOR = self.static_field('ROUND_FLOOR', 'I')
+        self.ROUND_HALF_DOWN = self.static_field('ROUND_HALF_DOWN', 'I')
+        self.ROUND_HALF_EVEN = self.static_field('ROUND_HALF_EVEN', 'I')
+        self.ROUND_HALF_UP = self.static_field('ROUND_HALF_UP', 'I')
+        self.ROUND_UNNECESSARY = self.static_field('ROUND_UNNECESSARY', 'I')
+        self.ROUND_UP = self.static_field('ROUND_UP', 'I')
+        self._TEN = self.static_field('TEN', 'Ljava/math/BigDecimal;')
+        self._ZERO = self.static_field('ZERO', 'Ljava/math/BigDecimal;')
+        self.cons_s = self.constructor('Ljava/lang/String;')
+        self.abs = self.method('abs', '()Ljava/math/BigDecimal;')
+
+    def __call__(self, *args):
+        return BigDecimal.Instance(self, *args)
+
+    @property
+    def ONE(self):
+        return self(self._ONE)
+
+    @property
+    def TEN(self):
+        return self(self._TEN)
+
+    @property
+    def ZERO(self):
+        return self(self._ZERO)
+
+    def new(self, *args):
+        if len(args) != 1:
+            raise ValueError("expected one argument")
+        return self.cons_s(*args)
 
 
 class Calendar(Object):
     """
-    Wrapper for java.util.Calendar java class
+    Wrapper for java.util.Calendar java abstract class
     """
     class Instance(Object.Instance):
         def __init__(self, cls, obj):
             super(Calendar.Instance, self).__init__(cls, obj)
-            # self.get = lambda o=obj, *a: cls.get(o, *a)
-            # self.getTimeInMillis = lambda o=obj: cls.getTimeInMillis(o)
-            # self._set2 = lambda o=obj, *a: cls._set2(o, *a)
-            # self._set3 = lambda o=obj, *a: cls._set3(o, *a)
-            # self._set5 = lambda o=obj, *a: cls._set5(o, *a)
-            # self._set6 = lambda o=obj, *a: cls._set6(o, *a)
+            self.get = lambda *a, o=obj: cls.get(o, *a)
+            self.getTimeInMillis = lambda o=obj: cls.getTimeInMillis(o)
+            self._set2 = lambda o=obj, *a: cls._set2(o, *a)
+            self._set3 = lambda o=obj, *a: cls._set3(o, *a)
+            self._set5 = lambda o=obj, *a: cls._set5(o, *a)
+            self._set6 = lambda o=obj, *a: cls._set6(o, *a)
+            self.setTimeInMillis = lambda *a, o=obj: cls.setTimeInMillis(o, *a)
+
+        @property
+        def AM_PM(self):
+            return self.get(self.cls.AM_PM)
+
+        @property
+        def DAY_OF_MONTH(self):
+            return self.get(self.cls.DAY_OF_MONTH)
+
+        @property
+        def DAY_OF_WEEK(self):
+            return self.get(self.cls.DAY_OF_WEEK)
+
+        @property
+        def DAY_OF_WEEK_IN_MONTH(self):
+            return self.get(self.cls.DAY_OF_WEEK_IN_MONTH)
+
+        @property
+        def DAY_OF_YEAR(self):
+            return self.get(self.cls.DAY_OF_YEAR)
+
+        @property
+        def DST_OFFSET(self):
+            return self.get(self.cls.DST_OFFSET)
+
+        @property
+        def ERA(self):
+            return self.get(self.cls.ERA)
+
+        @property
+        def HOUR(self):
+            return self.get(self.cls.HOUR)
+
+        @property
+        def HOUR_OF_DAY(self):
+            return self.get(self.cls.HOUR_OF_DAY)
+
+        @property
+        def MILLISECOND(self):
+            return self.get(self.cls.MILLISECOND)
+
+        @property
+        def MINUTE(self):
+            return self.get(self.cls.MINUTE)
+
+        @property
+        def MONTH(self):
+            return self.get(self.cls.MONTH)
+
+        @property
+        def SECOND(self):
+            return self.get(self.cls.SECOND)
+
+        @property
+        def SHORT(self):
+            return self.get(self.cls.SHORT)
+
+        @property
+        def WEEK_OF_MONTH(self):
+            return self.get(self.cls.WEEK_OF_MONTH)
+
+        @property
+        def WEEK_OF_YEAR(self):
+            return self.get(self.cls.WEEK_OF_YEAR)
+
+        @property
+        def YEAR(self):
+            return self.get(self.cls.YEAR)
+
+        @property
+        def ZONE_OFFSET(self):
+            return self.get(self.cls.ZONE_OFFSET)
 
         def set(self, *args):
             if len(args) == 2:
-                return self._set2(*args)
+                return self._set2(self.obj, *args)
             if len(args) == 3:
-                return self._set3(*args)
+                return self._set3(self.obj, *args)
             if len(args) == 5:
-                return self._set5(*args)
+                return self._set5(self.obj, *args)
             if len(args) == 6:
-                return self._set6(*args)
+                return self._set6(self.obj, *args)
             raise ValueError("incorrect number of arguments: %d" % len(args))
 
     def __init__(self, env, class_name='java.util.Calendar'):
@@ -551,6 +1129,7 @@ class Calendar(Object):
         self.OCTOBER = self.static_field('OCTOBER', 'I')
         self.PM = self.static_field('PM', 'I')
         self.SATURDAY = self.static_field('SATURDAY', 'I')
+        self.SECOND = self.static_field('SECOND', 'I')
         self.SEPTEMBER = self.static_field('SEPTEMBER', 'I')
         self.SHORT = self.static_field('SHORT', 'I')
         self.SUNDAY = self.static_field('SUNDAY', 'I')
@@ -562,16 +1141,67 @@ class Calendar(Object):
         self.WEEK_OF_YEAR = self.static_field('WEEK_OF_YEAR', 'I')
         self.YEAR = self.static_field('YEAR', 'I')
         self.ZONE_OFFSET = self.static_field('ZONE_OFFSET', 'I')
-        # self.get = self.method('get', '(I)I')
-        # self.getTimeInMillis = self.method('getTimeInMillis', '()L')
-        # self._set2 = self.method('set', '(II)V')
-        # self._set3 = self.method('set', '(III)V')
-        # self._set5 = self.method('set', '(IIIII)V')
-        # self._set6 = self.method('set', '(IIIIII)V')
-        # self.setTimeInMillis = self.method('setTimeInMillis', '(L)V')
+        self.get = self.method('get', '(I)I')
+        self.getTimeInMillis = self.method('getTimeInMillis', '()J')
+        self._set2 = self.method('set', '(II)V')
+        self._set3 = self.method('set', '(III)V')
+        self._set5 = self.method('set', '(IIIII)V')
+        self._set6 = self.method('set', '(IIIIII)V')
+        self.setTimeInMillis = self.method('setTimeInMillis', '(J)V')
 
     def __call__(self, *args):
         return Calendar.Instance(self, *args)
+
+
+class GregorianCalendar(Calendar):
+    """
+    Wrapper for java.util.GregorianCalendar java class
+    """
+    class Instance(Calendar.Instance):
+        def __init__(self, cls, obj):
+            super(GregorianCalendar.Instance, self).__init__(cls, obj)
+
+    def __init__(self, env, class_name='java.util.GregorianCalendar'):
+        super(GregorianCalendar, self).__init__(env, class_name=class_name)
+        self.AD = self.static_field('AD', 'I')
+        self.BC = self.static_field('BC', 'I')
+        self.cons0 = self.constructor()
+        self.cons3 = self.constructor('III')
+        self.cons5 = self.constructor('IIIII')
+        self.cons6 = self.constructor('IIIIII')
+
+    def __call__(self, *args):
+        return GregorianCalendar.Instance(self, *args)
+
+    def new(self, *args):
+        if len(args) == 0:
+            return self.cons0(*args)
+        elif len(args) == 3:
+            return self.cons3(*args)
+        elif len(args) == 5:
+            return self.cons5(*args)
+        elif len(args) == 6:
+            return self.cons6(*args)
+        else:
+            raise ValueError("expected 0, 3, 5, or 6 arguments, received %d" % len(args))
+
+
+class SQLException(LangException):
+    """
+    Wrapper for java.sql.SQLException
+    """
+    class Instance(LangException.Instance):
+        def __init__(self, cls, obj):
+            super(SQLException.Instance, self).__init__(cls, obj)
+            self.getErrorCode = lambda o=obj: cls.getErrorCode(o)
+            self.getNextException = lambda o=obj: cls.getNextException()
+            self.getSQLState = lambda o=obj: cls.getSQLState(o)
+
+    def __init__(self, env, class_name='java.sql.SQLException'):
+        super(SQLException, self).__init__(env, class_name=class_name)
+        self.getErrorCode = self.method('getErrorCode', '()I')
+        self.getNextException = self.method('getNextException', '()Ljava/sql/SQLException;')
+        self.getSQLState = self.method('getSQLState', '()Ljava/lang/String;')
 
 
 class Connection(Object):
@@ -612,7 +1242,6 @@ class Date(Object):
     """
     def __init__(self, env, class_name='java.util.Date'):
         super(Date, self).__init__(env, class_name=class_name)
-
 
 
 class DriverManager(Object):
@@ -662,7 +1291,6 @@ class DriverManager(Object):
         driver = self.env.classes['java.sql.Driver']
         drivers = self.getDrivers()
         return (driver(obj) for obj in enumeration(drivers))
-
 
 
 class Driver(Object):
@@ -780,6 +1408,7 @@ class ResultSet(Object):
         def __init__(self, cls, obj):
             super(ResultSet.Instance, self).__init__(cls, obj)
             self.close = lambda o=obj: cls.close(o)
+            self.getDouble = lambda i, o=obj: cls.getDouble(o, i)
             self.getInt = lambda i, o=obj: cls.getInt(o, i)
             self.getMetaData = lambda o=obj: cls.getMetaData(o)
             self.getString = lambda i, o=obj: cls.getString(o, i)
@@ -798,6 +1427,7 @@ class ResultSet(Object):
     def __init__(self, env, class_name='java.sql.ResultSet'):
         super(ResultSet, self).__init__(env, class_name=class_name)
         self.close = self.method('close', '()V')
+        self.getDouble = self.method('getDouble', '(I)D')
         self.getInt = self.method('getInt', '(I)I')
         self.getMetaData = self.method('getMetaData', '()Ljava/sql/ResultSetMetaData;')
         self.getString = self.method('getString', '(I)Ljava/lang/String;')
@@ -847,16 +1477,26 @@ class SQLDate(Date):
     Wrapper for java.util.Date java class
     """
     class Instance(Object.Instance):
+        """
+        Wrapper for java.util.Date object instance
+        """
         def __init__(self, cls, obj):
             super(SQLDate.Instance, self).__init__(cls, obj)
 
     def __init__(self, env, class_name='java.util.Date'):
         super(SQLDate, self).__init__(env, class_name=class_name)
-        self._init = self.method('<init>', '(III)V')
-        # self.valueOf = self.static_method('valueOf', '(Ljava/lang/String;)Ljava/sql/Date;')
+        self.cons = self.constructor()
+        self.cons_j = self.constructor('J')
 
-    def __call__(self, year, month, day):
-        return SQLDate.Instance(self._init(year, month, day))
+    def __call__(self, *args):
+        return SQLDate.Instance(*args)
+
+    def new(self, *args):
+        if len(args) == 0:
+            return self.cons()
+        elif len(args) == 1:
+            return self.cons(*args)
+        raise ValueError("expected 0 or 1 (long) argument")
 
 
 class Statement(Object):

@@ -47,18 +47,6 @@ PYTHON_BIND = {
 }
 
 
-def bind(stmt, args):
-    if hasattr(args, '__getitem__'):
-        args = [args[i] for i in range(len(args))]
-    for i, arg in enumerate(args):
-        if arg is None:
-            stmt.setNull(i + 1, 12)
-        elif type(arg) in PYTHON_BIND:
-            PYTHON_BIND[type(arg)](stmt, i + 1, arg)
-        else:
-            raise RuntimeError("can't bind to python value %r(%r)", arg, type(arg))
-
-
 def bind_funcs(rows):
     funcs = None
     for row in rows:
@@ -104,6 +92,7 @@ def date_format(fn, fmt, fn2=None):
 def fetch_funcs(rs):
     env = rs.env
     meta = env.classes['java.sql.ResultSetMetaData'](rs.getMetaData())
+    print('SQLState', rs.getSQLState())
     count = meta.getColumnCount()
     errors = []
     for i in range(count):

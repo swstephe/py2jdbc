@@ -13,8 +13,8 @@ from ctypes import (
     CDLL, CFUNCTYPE, POINTER,
     byref
 )
-from p2jdbc import jvm
-from p2jdbc import mutf8
+from . import jvm
+from . import mutf8
 
 log = logging.getLogger(__name__)
 codecs.register(mutf8.info)
@@ -53,7 +53,6 @@ class _jobject(Structure):
     This allows me to maintain class hierarchies with other
     object pointers.
     """
-    pass
 
 
 _jclass = _jobject
@@ -2135,6 +2134,19 @@ class JNIEnv(Structure):
         """
         return self.functions[0].GetObjectRefType(self, obj)
 
+    def GetModule(self, clazz):
+        """
+        Returns the java.lang.Module object for the module that the class is a member of.
+        If the class is not in a named module then the unnamed module of the class loader
+        for the class is returned. If the class represents an array type then this function
+        returns the Module object for the element type. If the class represents a primitive
+        type or void, then the Module object for the java.base module is returned.
+
+        :param clazz: a Java class object, must not be None
+        :return: the module that the class or interface is a member of.
+        """
+        return self.functions[0].GetModule(self, clazz)
+
 
 JNIEnv_p = POINTER(JNIEnv)
 
@@ -2449,6 +2461,7 @@ JNINativeInterface_._fields_ = tuple(map_fields(
     (jlong, 'GetDirectBufferCapacity', JNIEnv_p, jobject),
 
     (int, 'GetObjectRefType', JNIEnv_p, jobject),
+    (jobject, 'GetModule', JNIEnv_p, jclass),
 ))
 
 
@@ -2492,6 +2505,8 @@ JNI_VERSION_1_2 = 0x00010002
 JNI_VERSION_1_4 = 0x00010004
 JNI_VERSION_1_6 = 0x00010006
 JNI_VERSION_1_8 = 0x00010008
+JNI_VERSION_9 = 0x00090000
+JNI_VERSION_10 = 0x000a0000
 
 vm = None
 tlocal = threading.local()
@@ -2515,7 +2530,11 @@ def decode(s):
     :param s: a sequence of bytes
     :return: the decoded unicode string
     """
-    return codecs.decode(s.rstrip(six.b('\0')), ENCODING) if isinstance(s, six.binary_type) else s
+    return (
+        codecs.decode(s.rstrip(six.b('\0')), ENCODING)
+        if isinstance(s, six.binary_type)
+        else s
+    )
 
 
 def get_env(**kwargs):
@@ -2594,9 +2613,47 @@ def destroy_vm():
 def check_exception(env):
     throwable = env.ExceptionOccurred()
     if throwable:
-        env.ExceptionDescribe()
+        if log.getEffectiveLevel() == logging.DEBUG:
+            env.ExceptionDescribe()
         env.ExceptionClear()
         raise JavaException(env, throwable)
+
+
+def get_class_name(env, obj):
+    """
+    Return the class name of an object.
+
+    :param env: the JNIEnv environment
+    :param obj: a Java object instance
+    :return: a Python string name of the Java object class
+    """
+    class1 = env.GetObjectClass(obj)
+    check_exception(env)
+    assert class1 is not None
+    mid_get_class = env.GetMethodID(class1, 'getClass', '()Ljava/lang/Class;')
+    check_exception(env)
+    assert mid_get_class is not None
+    args = jvalue.__mul__(0)()
+    obj2 = env.CallObjectMethodA(obj, mid_get_class, args)
+    check_exception(env)
+    assert obj2 is not None
+    class2 = env.GetObjectClass(obj2)
+    check_exception(env)
+    assert class2 is not None
+    mid_get_name = env.GetMethodID(class2, 'getName', '()Ljava/lang/String;')
+    check_exception(env)
+    assert mid_get_name is not None
+    s = env.CallObjectMethodA(class1, mid_get_name, args)
+    check_exception(env)
+    assert s is not None
+    chars = env.GetStringUTFChars(s, None)
+    check_exception(env)
+    assert chars is not None
+    env.DeleteLocalRef(class1)
+    env.DeleteLocalRef(obj2)
+    env.DeleteLocalRef(class2)
+    env.DeleteLocalRef(s)
+    return decode(chars)
 
 
 atexit.register(destroy_vm)

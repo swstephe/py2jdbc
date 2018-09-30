@@ -32,6 +32,14 @@ class TObject(object):
         jni.check_exception(_env)
         self.obj = obj
 
+    def __del__(self):
+        if self.obj:
+            _env.DeleteLocalRef(self.obj)
+        self.obj = None
+        if self.cls:
+            _env.DeleteLocalRef(self.cls)
+        self.cls = None
+
     def __eq__(self, obj):
         args = jni.jvalue.__mul__(1)()
         setattr(args[0], 'l', obj)
@@ -78,7 +86,7 @@ class TClass(TObject):
         jni.check_exception(_env)
         assert self._getName is not None
 
-    def getDeclareField(self, name):
+    def getDeclaredField(self, name):
         str_obj = _env.NewStringUTF(name)
         jni.check_exception(_env)
         assert str_obj is not None
@@ -86,6 +94,7 @@ class TClass(TObject):
         setattr(args[0], 'l', str_obj)
         field = _env.CallObjectMethodA(self.obj, self._getDeclaredField, args)
         jni.check_exception(_env)
+        _env.DeleteLocalRef(str_obj)
         assert field is not None
         return TReflectField(field)
 
@@ -108,6 +117,9 @@ class TClass(TObject):
         method = _env.CallObjectMethodA(self.obj, self._getDeclaredMethod, args)
         jni.check_exception(_env)
         assert method is not None
+        _env.DeleteLocalRef(str_obj)
+        _env.DeleteLocalRef(_classes)
+        _env.DeleteLocalRef(cls)
         return TReflectMethod(method)
 
     def forName(self, name):
@@ -125,8 +137,8 @@ class TClass(TObject):
         args = jni.jvalue.__mul__(0)()
         str_obj = _env.CallObjectMethodA(self.obj, self._getName, args)
         chars = _env.GetStringUTFChars(str_obj, None)
-        value = jni.decode(chars)
-        return value
+        _env.DeleteLocalRef(str_obj)
+        return jni.decode(chars)
 
 
 class TReflectField(TObject):
@@ -143,17 +155,17 @@ class TReflectField(TObject):
         self._hashCode = _env.GetMethodID(self.cls, 'hashCode', '()I')
         jni.check_exception(_env)
         assert self._hashCode is not None
-        self.obj = obj
 
     def getName(self):
         args = jni.jvalue.__mul__(0)()
         str_obj = _env.CallObjectMethodA(self.obj, self._getName, args)
         jni.check_exception(_env)
+        assert str_obj is not None
         chars = _env.GetStringUTFChars(str_obj, None)
         jni.check_exception(_env)
         assert chars is not None
-        value = jni.decode(chars)
-        return value
+        _env.DeleteLocalRef(str_obj)
+        return jni.decode(chars)
 
     def getType(self):
         args = jni.jvalue.__mul__(0)()
@@ -206,8 +218,8 @@ class TReflectMethod(TObject):
         chars = _env.GetStringUTFChars(str_obj, None)
         jni.check_exception(_env)
         assert chars is not None
-        value = jni.decode(chars)
-        return value
+        _env.DeleteLocalRef(str_obj)
+        return jni.decode(chars)
 
     def getReturnType(self):
         args = jni.jvalue.__mul__(0)()
@@ -565,10 +577,12 @@ def test_object_array():
         value = _env.GetObjectArrayElement(a, i)
         jni.check_exception(_env)
         chars = _env.GetStringUTFChars(value, None)
+        _env.DeleteLocalRef(value)
         jni.check_exception(_env)
         assert jni.decode(chars) == data[i]
     assert _env.GetArrayLength(a) == count
     _env.DeleteLocalRef(a)
+    _env.DeleteLocalRef(cls)
 
 
 def test_is_same_object():
@@ -799,9 +813,12 @@ def test_system():
     args = jni.jvalue.__mul__(1)()
     setattr(args[0], 'l', s)
     result = _env.CallStaticObjectMethodA(cls, mid, args)
+    jni.check_exception(_env)
+    assert result is not None
     _env.DeleteLocalRef(s)
     jni.check_exception(_env)
     chars = _env.GetStringUTFChars(result, None)
+    _env.DeleteLocalRef(result)
     jni.check_exception(_env)
     assert jni.decode(chars) == CLASSPATH
     fid = _env.GetStaticFieldID(cls, 'out', 'Ljava/io/PrintStream;')
@@ -809,6 +826,8 @@ def test_system():
     result2 = _env.GetStaticObjectField(cls, fid)
     jni.check_exception(_env)
     assert result2 is not None
+    _env.DeleteLocalRef(result2)
+    _env.DeleteLocalRef(cls)
 
 
 def test_class():
@@ -830,6 +849,7 @@ def test_class():
     _env.DeleteLocalRef(s)
     jni.check_exception(_env)
     assert result is not None
+    _env.DeleteLocalRef(result)
     mid2 = _env.GetMethodID(
         cls,
         'getName',
@@ -846,8 +866,10 @@ def test_class():
     jni.check_exception(_env)
     assert result is not None
     chars = _env.GetStringUTFChars(result, None)
+    _env.DeleteLocalRef(result)
     jni.check_exception(_env)
     assert jni.decode(chars) == 'java.lang.Class'
+    _env.DeleteLocalRef(cls)
 
 
 def test_drivermanager():
@@ -870,12 +892,14 @@ def test_drivermanager():
     assert conn is not None
     _env.DeleteLocalRef(s)
     _env.DeleteLocalRef(conn)
+    _env.DeleteLocalRef(cls)
 
 
 def test_exceptions():
     cls = _env.FindClass('foo.bar.baz')
-    with pytest.raises(jni.JavaException):
+    with pytest.raises(jni.JavaException) as e:
         jni.check_exception(_env)
+    _env.DeleteLocalRef(e.value.throwable)
     _env.DeleteLocalRef(cls)
     cls = _env.FindClass('java.sql.SQLException')
     jni.check_exception(_env)
@@ -887,8 +911,11 @@ def test_exceptions():
     jni.check_exception(_env)
     assert obj is not None
     _env.Throw(obj)
-    with pytest.raises(jni.JavaException):
+    with pytest.raises(jni.JavaException) as e:
         jni.check_exception(_env)
+    _env.DeleteLocalRef(e.value.throwable)
+    _env.DeleteLocalRef(obj)
+    _env.DeleteLocalRef(cls)
 
 
 def test_reflect_field():
@@ -896,7 +923,7 @@ def test_reflect_field():
     jni.check_exception(_env)
     assert integer_cls is not None
     tclass = TClass(integer_cls)
-    field = tclass.getDeclareField('MAX_VALUE')
+    field = tclass.getDeclaredField('MAX_VALUE')
     assert field.getName() == 'MAX_VALUE'
     fid = _env.FromReflectedField(field.obj)
     jni.check_exception(_env)
@@ -905,9 +932,13 @@ def test_reflect_field():
     fld2 = _env.ToReflectedField(integer_cls, fid, is_static)
     jni.check_exception(_env)
     assert fld2 is not None
+    assert jni.get_class_name(_env, fld2) == 'java.lang.reflect.Field'
     field2 = TReflectField(fld2)
     assert field2.getName() == 'MAX_VALUE'
     assert field.hashCode() == field2.hashCode()
+    del field2
+    del field
+    del tclass
 
 
 def test_reflect_method():
@@ -916,6 +947,7 @@ def test_reflect_method():
     assert integer_cls is not None
     tclass = TClass(integer_cls)
     method = tclass.getDeclaredMethod('intValue')
+    jni.check_exception(_env)
     assert method.getName() == 'intValue'
     mid = _env.FromReflectedMethod(method.obj)
     jni.check_exception(_env)
@@ -927,6 +959,9 @@ def test_reflect_method():
     method2 = TReflectMethod(mth2)
     assert method2.getName() == 'intValue'
     assert method.hashCode() == method2.hashCode()
+    del method2
+    del method
+    del tclass
 
 
 def test_custom():
@@ -984,11 +1019,14 @@ def test_custom():
     jni.check_exception(_env)
     str_obj = _env.GetObjectField(obj, fid)
     chars = _env.GetStringUTFChars(str_obj, None)
+    _env.DeleteLocalRef(str_obj)
     assert jni.decode(chars) == 'abcdef'
     str_obj = _env.NewStringUTF('one two three')
     _env.SetObjectField(obj, fid, str_obj)
+    _env.DeleteLocalRef(str_obj)
     str2 = _env.GetObjectField(obj, fid)
     chars = _env.GetStringUTFChars(str2, None)
+    _env.DeleteLocalRef(str2)
     assert jni.decode(chars) == 'one two three'
     args = jni.jvalue.__mul__(0)()
     mid = _env.GetStaticMethodID(custom_cls, 'staticVoidMethod', '()V')
@@ -1042,5 +1080,23 @@ def test_custom():
     str_obj = _env.CallStaticObjectMethodA(custom_cls, mid, args)
     jni.check_exception(_env)
     chars = _env.GetStringUTFChars(str_obj, None)
+    _env.DeleteLocalRef(str_obj)
     assert jni.decode(chars) == 'hello world'
+    _env.DeleteLocalRef(obj)
+    _env.DeleteLocalRef(custom_cls)
 
+
+def test_get_class_name():
+    cls = _env.FindClass('java.lang.Integer')
+    jni.check_exception(_env)
+    assert cls is not None
+    cons = _env.GetMethodID(cls, '<init>', '(I)V')
+    jni.check_exception(_env)
+    args = jni.jvalue.__mul__(1)()
+    args[0].i = 0x12345678
+    obj = _env.NewObjectA(cls, cons, args)
+    jni.check_exception(_env)
+    assert obj is not None
+    assert jni.get_class_name(_env, obj) == 'java.lang.Integer'
+    _env.DeleteLocalRef(obj)
+    _env.DeleteLocalRef(cls)

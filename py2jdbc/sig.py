@@ -387,7 +387,7 @@ class JSigObject(JSigScalar):
 
     def __init__(self, env, class_name):
         super(JSigObject, self).__init__(env)
-        self.classname = class_name
+        self.classname = class_name.replace('.', '/')
 
     def j2py(self, value):
         """
@@ -400,8 +400,9 @@ class JSigObject(JSigScalar):
         :return: a Java string or object instance.
         """
         if self.classname == 'java/lang/String':
-            value = self.env.GetStringUTFChars(value)
-            return jni.decode(value)
+            chars = self.env.GetStringUTFChars(value)
+            self.env.DeleteLocalRef(value)
+            return jni.decode(chars)
         return super(JSigObject, self).j2py(value)
 
     def py2j(self, value):
@@ -414,11 +415,28 @@ class JSigObject(JSigScalar):
         :param value: a java object or Python string
         :return: a java object
         """
-        if self.classname:
+        if self.classname == 'java/lang/String':
             value = self.env.NewStringUTF(value)
             self._release = True
             return value
         return super(JSigObject, self).py2j(value)
+
+    def new(self, cls, mid, argtypes, *args):
+        """
+        Call a construtor on an object instance
+
+        :param cls: a Java class object
+        :param mid: the methodID of the constructor
+        :param argtypes: a sequence of argument signature types
+        :param args: the Python arguments to the constructor
+        :return: the created object
+        """
+        _args = method_args(argtypes, *args)
+        obj = self.env.NewObjectA(cls, mid, _args)
+        jni.check_exception(self.env)
+        for _a, _at in zip(_args, argtypes):
+            _at.release(_a.l)
+        return obj
 
     def release(self, value):
         """
@@ -457,7 +475,7 @@ class JSigArray(JSig):
         """
         return getattr(jni, 'j' + self.name[0].lower() + self.name[1:-5])
 
-    def _j2py(self, value):
+    def elem_j2py(self, value):
         """
         Each element is, by default, itself.
         :param value:  the Java primitive value
@@ -467,7 +485,7 @@ class JSigArray(JSig):
 
     def j2py(self, value):
         """
-        Convert a Java array to a Python list by applying `_j2py`
+        Convert a Java array to a Python list by applying `elem_j2py`
         to each element.
 
         :param value: a Java array object
@@ -475,11 +493,11 @@ class JSigArray(JSig):
         """
         _len = self.env.GetArrayLength(value)
         _values = self._fn_get_elements(value, None)
-        result = [self._j2py(_values[i]) for i in range(_len)]
+        result = [self.elem_j2py(_values[i]) for i in range(_len)]
         self._fn_release_elements(value, _values, jni.JNI_ABORT)
         return result
 
-    def _py2j(self, value):
+    def elem_py2j(self, value):
         """
         Convert a python element value to a Java primitive value.
         By default, the values are the same
@@ -498,7 +516,7 @@ class JSigArray(JSig):
         """
         _len = len(value)
         result = self._fn_new(_len)
-        _values = self.jtype.__mul__(_len)(*(self._py2j(v) for v in value))
+        _values = self.jtype.__mul__(_len)(*(self.elem_py2j(v) for v in value))
         self._fn_set_region(result, 0, _len, _values)
         return result
 
@@ -556,7 +574,7 @@ class JSigBooleanArray(JSigArray):
     """
     code = '[Z'
 
-    def _j2py(self, value):
+    def elem_j2py(self, value):
         """
         Convert each element of a jbooleanArray to a Python boolean
 
@@ -565,7 +583,7 @@ class JSigBooleanArray(JSigArray):
         """
         return value == jni.JNI_TRUE
 
-    def _py2j(self, value):
+    def elem_py2j(self, value):
         """
         Convert each element of a Python list to a jboolean
 
@@ -588,7 +606,7 @@ class JSigCharArray(JSigArray):
     """
     code = '[C'
 
-    def _j2py(self, value):
+    def elem_j2py(self, value):
         """
         Convert each element of a jcharArray to a Python unicode char
 
@@ -597,7 +615,7 @@ class JSigCharArray(JSigArray):
         """
         return six.unichr(value)
 
-    def _py2j(self, value):
+    def elem_py2j(self, value):
         """
         Convert each element of a Python unicode sequence to a jchar
 
@@ -613,7 +631,7 @@ class JSigShortArray(JSigArray):
     """
     code = '[S'
 
-    def _py2j(self, value):
+    def elem_py2j(self, value):
         """
         Convert each Python value to a jshort value
 
@@ -629,7 +647,7 @@ class JSigIntArray(JSigArray):
     """
     code = '[I'
 
-    def _py2j(self, value):
+    def elem_py2j(self, value):
         """
         Convert each Python value to a jint value
 
@@ -645,7 +663,7 @@ class JSigLongArray(JSigArray):
     """
     code = '[J'
 
-    def _py2j(self, value):
+    def elem_py2j(self, value):
         """
         Convert each Python value to a jlong value
 
@@ -661,7 +679,7 @@ class JSigFloatArray(JSigArray):
     """
     code = '[F'
 
-    def _py2j(self, value):
+    def elem_py2j(self, value):
         """
         Convert each Python value to a jfloat value
 
@@ -677,7 +695,7 @@ class JSigDoubleArray(JSigArray):
     """
     code = '[D'
 
-    def _py2j(self, value):
+    def elem_py2j(self, value):
         """
         Convert each Python value to a jdouble value
 
@@ -708,7 +726,7 @@ class JSigObjectArray(JSig):
     def jtype(self):
         return jni.jobjectArray
 
-    def _j2py(self, value):
+    def elem_j2py(self, value):
         """
         Convert each element of an objct array to a string
         if element type is java/lang/String.
@@ -719,7 +737,7 @@ class JSigObjectArray(JSig):
         if self.class_name == 'java/lang/String':
             value = self.env.GetStringUTFChars(value)
             return jni.decode(value)
-        return super(JSigObjectArray, self)._j2py(value)
+        return value
 
     def j2py(self, value):
         """
@@ -730,11 +748,11 @@ class JSigObjectArray(JSig):
         """
         _len = self.env.GetArrayLength(value)
         return [
-            self._j2py(self.env.GetObjectArrayElement(value, i))
+            self.elem_j2py(self.env.GetObjectArrayElement(value, i))
             for i in range(_len)
         ]
 
-    def _py2j(self, value):
+    def elem_py2j(self, value):
         """
         Convert each element of a Python sequence to a Java object
         :param value: a Python value
@@ -755,7 +773,7 @@ class JSigObjectArray(JSig):
         _len = len(value)
         result = self.env.NewObjectArray(_len, self.cls, None)
         for i, v in enumerate(value):
-            self.env.SetObjectArrayElement(result, i, self._py2j(v))
+            self.env.SetObjectArrayElement(result, i, self.elem_py2j(v))
         return result
 
     def call(self, obj, mid, argtypes, *args):
@@ -865,6 +883,23 @@ def method_signature(env, signature):
     assert signature[0] == '('
     argtypes = tuple(type_signature(env, signature[1:]))
     restype = next(type_signature(env, signature[signature.index(')') + 1:]))
+    return argtypes, restype
+
+
+def constructor_signature(env, class_name, signature):
+    """
+    Given a signature for a method, (just the arguments),
+    parse and return a tuple of argument signature types and a result type.
+
+    The returned values can be used to filter Python values into
+    constructor arguments and call the NewObject function.
+    :param env: the current JNI environment
+    :param class_name: the name of the class of the object to create
+    :param signature: the Java constructor argument signature
+    :return: a tuple of argument types and a result type
+    """
+    argtypes = tuple(type_signature(env, signature))
+    restype = JSigObject(env, class_name)
     return argtypes, restype
 
 

@@ -73,6 +73,7 @@ def encode(text, errors='strict'):
     bytes, length consumed).
 
     :param text: unicode text to be encoded
+    :param errors: how to handle encoding errors: strict, ignore, replace, etc.
     :return: a string of bytes in Modified UTF-8
     """
     value, length = six.b(''), 0
@@ -196,9 +197,9 @@ def decoder(data):
     :return: a generator producing a string of unicode characters
     :raises: `UnicodeDecodeError` if unrecognized byte in sequence is encountered.
     """
-    def next_byte(it, start, count):
+    def next_byte(_it, start, count):
         try:
-            return next(it)[1]
+            return next(_it)[1]
         except StopIteration:
             raise UnicodeDecodeError(
                 NAME, data, start, start + count,

@@ -5,7 +5,7 @@ from . import util
 from . import wrap
 from . import exc
 
-version = '0.1'
+version = '0.0.2'
 apilevel = '2.0'
 threadsafety = 1
 paramstyle = 'qmark'
@@ -121,7 +121,18 @@ class Cursor(object):
         except wrap.JavaException as e:
             raise OperationalError(e.message)
         if args:
-            util.bind(stmt, args)
+            if hasattr(args, '__getitem__'):
+                args = [args[i] for i in range(len(args))]
+            try:
+                for i, arg in enumerate(args):
+                    if arg is None:
+                        stmt.setNull(i + 1, 12)
+                    elif type(arg) in util.PYTHON_BIND:
+                        util.PYTHON_BIND[type(arg)](stmt, i + 1, arg)
+                    else:
+                        raise RuntimeError("can't bind to python value %r(%r)", arg, type(arg))
+            except wrap.JavaException as e:
+                raise ProgrammingError(e.message)
         try:
             check = stmt.execute()
         except wrap.JavaException as e:

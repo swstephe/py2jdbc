@@ -177,6 +177,7 @@ def test_boolean_array():
     for i in range(count):
         assert a2[i] == a1[i]
     _env.ReleaseBooleanArrayElements(j2, a2, jni.JNI_ABORT)
+    _env.DeleteLocalRef(j2)
     _env.DeleteLocalRef(ja)
 
 
@@ -197,6 +198,7 @@ def test_byte_array():
     for i in range(count):
         assert a2[i] == a1[i]
     _env.ReleaseByteArrayElements(j2, a2, jni.JNI_ABORT)
+    _env.DeleteLocalRef(j2)
     _env.DeleteLocalRef(ja)
 
 
@@ -217,6 +219,7 @@ def test_char_array():
     for i in range(count):
         assert a2[i] == a1[i]
     _env.ReleaseCharArrayElements(j2, a2, jni.JNI_ABORT)
+    _env.DeleteLocalRef(j2)
     _env.DeleteLocalRef(ja)
 
 
@@ -237,6 +240,7 @@ def test_short_array():
     for i in range(count):
         assert a2[i] == a1[i]
     _env.ReleaseShortArrayElements(j2, a2, jni.JNI_ABORT)
+    _env.DeleteLocalRef(j2)
     _env.DeleteLocalRef(ja)
 
 
@@ -257,6 +261,7 @@ def test_int_array():
     for i in range(count):
         assert a2[i] == a1[i]
     _env.ReleaseIntArrayElements(j2, a2, jni.JNI_ABORT)
+    _env.DeleteLocalRef(j2)
     _env.DeleteLocalRef(ja)
 
 
@@ -277,6 +282,7 @@ def test_long_array():
     for i in range(count):
         assert a2[i] == a1[i]
     _env.ReleaseLongArrayElements(j2, a2, jni.JNI_ABORT)
+    _env.DeleteLocalRef(j2)
     _env.DeleteLocalRef(ja)
 
 
@@ -297,6 +303,7 @@ def test_float_array():
     a2 = _env.GetFloatArrayElements(j2, None)
     assert sum(abs(a2[i] - a1[i]) for i in range(count)) == 0
     _env.ReleaseFloatArrayElements(j2, a2, jni.JNI_ABORT)
+    _env.DeleteLocalRef(j2)
     _env.DeleteLocalRef(ja)
 
 
@@ -317,6 +324,7 @@ def test_double_array():
     a2 = _env.GetDoubleArrayElements(j2, None)
     assert sum(abs(a2[i] - a1[i]) for i in range(count)) == 0
     _env.ReleaseDoubleArrayElements(j2, a2, jni.JNI_ABORT)
+    _env.DeleteLocalRef(j2)
     _env.DeleteLocalRef(ja)
 
 
@@ -337,6 +345,8 @@ def test_system():
     jni.check_exception(_env)
     result2 = t.get_static(cls, fid)
     assert result2 is not None
+    _env.DeleteLocalRef(result2)
+    _env.DeleteLocalRef(cls)
 
 
 def test_class():
@@ -350,6 +360,7 @@ def test_class():
     argtypes, restype = sig.method_signature(_env, signature)
     result = restype.call_static(cls, mid1, argtypes, 'java.lang.System')
     assert result is not None
+    _env.DeleteLocalRef(result)
     signature = '()Ljava/lang/String;'
     mid2 = _env.GetMethodID(cls, 'getName', signature)
     jni.check_exception(_env)
@@ -357,6 +368,7 @@ def test_class():
     argtypes, restype = sig.method_signature(_env, signature)
     result = restype.call(cls, mid2, argtypes)
     assert result == 'java.lang.Class'
+    _env.DeleteLocalRef(cls)
 
 
 def test_drivermanager():
@@ -370,3 +382,59 @@ def test_drivermanager():
     argtypes, restype = sig.method_signature(_env, signature)
     conn = restype.call_static(cls, mid1, argtypes, 'jdbc:sqlite::memory:')
     assert conn is not None
+    _env.DeleteLocalRef(conn)
+    _env.DeleteLocalRef(cls)
+
+
+def _new(class_name, signature, *values):
+    cls = _env.FindClass(class_name)
+    jni.check_exception(_env)
+    assert cls is not None
+    argtypes, restype = sig.constructor_signature(_env, class_name, signature)
+    mid = _env.GetMethodID(cls, '<init>', '({})V'.format(signature))
+    jni.check_exception(_env)
+    obj = restype.new(cls, mid, argtypes, *values)
+    jni.check_exception(_env)
+    assert obj is not None
+    _env.DeleteLocalRef(obj)
+    _env.DeleteLocalRef(cls)
+
+
+def test_new_boolean():
+    _new('java.lang.Boolean', 'Ljava/lang/String;', 'true')
+    _new('java.lang.Boolean', 'Z', True)
+
+
+def test_new_byte():
+    _new('java.lang.Byte', 'Ljava/lang/String;', '123')
+    _new('java.lang.Byte', 'B', 123)
+
+
+def test_new_char():
+    _new('java.lang.Character', 'C', six.unichr(123))
+
+
+def test_new_short():
+    _new('java.lang.Short', 'Ljava/lang/String;', '12345')
+    _new('java.lang.Short', 'S', 12345)
+
+
+def test_new_int():
+    _new('java.lang.Integer', 'Ljava/lang/String;', '654321')
+    _new('java.lang.Integer', 'I', 654321)
+
+
+def test_new_long():
+    _new('java.lang.Long', 'Ljava/lang/String;', '789654321')
+    _new('java.lang.Long', 'J', 789654321)
+
+
+def test_new_float():
+    _new('java.lang.Float', 'Ljava/lang/String;', '3.1415')
+    _new('java.lang.Float', 'F', 3.1415)
+    _new('java.lang.Float', 'D', 3.1415)
+
+
+def test_new_double():
+    _new('java.lang.Double', 'Ljava/lang/String;', '3.14159265')
+    _new('java.lang.Double', 'D', 3.14159265)
