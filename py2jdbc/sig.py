@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 import six
-from . import jni
+from py2jdbc import jni
 
 
 class JSigType(type):
@@ -289,6 +289,7 @@ class JSigChar(JSigScalar):
         :param value: a jchar (short) value
         :return: a Python unicode character
         """
+        # noinspection PyCompatibility
         return six.unichr(value)
 
     def py2j(self, value):
@@ -613,6 +614,7 @@ class JSigCharArray(JSigArray):
         :param value: a jchar (short) element
         :return: a Python unicode char
         """
+        # noinspection PyCompatibility
         return six.unichr(value)
 
     def elem_py2j(self, value):

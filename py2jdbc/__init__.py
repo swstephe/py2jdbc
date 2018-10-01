@@ -1,9 +1,9 @@
 # -*- coding: utf8 -*-
 import six
 import time
-from . import util
-from . import wrap
-from . import exc
+from py2jdbc import util
+from py2jdbc import wrap
+from py2jdbc import exc
 
 version = '0.0.3'
 apilevel = '2.0'
@@ -365,8 +365,10 @@ def Timestamp(year, month, day, hour, minute, second):
 def DateFromTicks(ticks):
     return Date(*time.localtime(ticks)[:3])
 
+
 def TimeFromTicks(ticks):
     return Time(*time.localtime(ticks)[3:6])
+
 
 def TimestampFromTicks(ticks):
     return Timestamp(*time.localtime(ticks)[:6])

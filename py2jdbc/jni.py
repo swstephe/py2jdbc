@@ -13,8 +13,8 @@ from ctypes import (
     CDLL, CFUNCTYPE, POINTER,
     byref
 )
-from . import jvm
-from . import mutf8
+from py2jdbc import jvm
+from py2jdbc import mutf8
 
 log = logging.getLogger(__name__)
 codecs.register(mutf8.info)
@@ -145,7 +145,7 @@ class JNINativeMethod(Structure):
     )
 
 
-# noinspection PyPep8Naming
+# noinspection PyPep8Naming,PyClassHasNoInit
 class jobjectType:
     """
     Simulate the JNI enum jobjectType.
@@ -2520,7 +2520,7 @@ def encode(s):
     :param s: unicode string to encode
     :return: the encoded bytes
     """
-    return codecs.encode(s, ENCODING) + six.b('\0') if isinstance(s, six.text_type) else s
+    return (codecs.encode(s, ENCODING) if isinstance(s, six.text_type) else s) + six.b('\0')
 
 
 def decode(s):
@@ -2564,7 +2564,7 @@ def get_env(**kwargs):
                 if isinstance(v, six.string_types):
                     opts.append('-Djava.class.path={}'.format(v))
                 else:
-                    opts.append('-Djava.class.path={}'.format(':'.join(v)))
+                    opts.append('-Djava.class.path={}'.format(jvm.CP_SEP.join(v)))
             elif k == 'verbose':
                 if isinstance(v, six.string_types):
                     opts.append('-verbose:{}'.format(v))
@@ -2575,6 +2575,7 @@ def get_env(**kwargs):
                     opts.append('-Xcheck:{}'.format(v))
                 else:
                     opts += ['-Xcheck:{}'.format(x) for x in v]
+        print('opts', opts)
         if opts:
             options = JavaVMOption.__mul__(len(opts))()
             for i, opt in enumerate(opts):

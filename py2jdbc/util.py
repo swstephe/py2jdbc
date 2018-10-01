@@ -1,8 +1,8 @@
 # -*- coding: utf8 -*-
 import datetime
 import time
-from . import exc
-from . import wrap
+from py2jdbc import exc
+from py2jdbc import wrap
 
 JAVA_PYTHON = dict((
     ('BIGINT', 'getInt'),
@@ -56,6 +56,7 @@ def bind_funcs(rows):
             if funcs[i] is not None:
                 continue
             if type(value) in PYTHON_BIND:
+                # noinspection PyTypeChecker
                 funcs[i] = PYTHON_BIND[type(value)]
         if all(f is not None for f in funcs):
             break

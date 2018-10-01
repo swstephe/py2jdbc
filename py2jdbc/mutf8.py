@@ -1,11 +1,14 @@
 # -*- coding: utf8 -*-
-
 import logging
 import codecs
 import six
 
 log = logging.getLogger(__name__)
 NAME = 'mutf8'      # not cesu-8, which uses a different zero-byte
+
+
+def mutf8_unichr(value):
+    return six.u("\\U%08x" % value)
 
 
 def _bytes(*vals):
@@ -29,10 +32,25 @@ def encoder(text):
     This generator processes a string and generates a sequence of bytes
     in the Modified UTF-8 encoding.
 
+    Automatically handle UTF-16 "surrogate pairs" if being used from "narrow Python",
+    where unicode characters are indexed as 2 surrogates.
+
     :param text: a string, usually unicode
     :return: a string of bytes in Modified UTF-8 encoding.
     """
-    for i, x in enumerate(ord(c) for c in text):
+    it = iter(enumerate(ord(c) for c in text))
+    for i, x in it:
+        if 0xd800 <= x <= 0xdbff:       # high surrogate
+            j, x2 = next(it)
+            if not 0xd800 <= x2 <= 0xdfff:  # low surrogate
+                raise UnicodeEncodeError(
+                    NAME,
+                    text,
+                    i,
+                    j + 1,
+                    'bad surrogate pair (high)'
+                )
+            x = 0x10000 | ((x & 0x3ff) << 10) | (x2 & 0x3ff)
         if x == 0:
             yield _bytes(0xc0, 0x80)
         elif x <= 0x7f:
@@ -111,7 +129,7 @@ class DecodeMap(object):
     If the mask and compare fails, this will raise UnicodeDecodeError so
     encode and decode will correctly handle bad characters.
     """
-    def __init__(self, count, mask, cmp, bits):
+    def __init__(self, count, mask, value, bits):
         """
         Initialize a DecodeMap, entry from a static dictionary for the module.
         It automatically calculates the mask for the bits for the value, (always
@@ -119,12 +137,12 @@ class DecodeMap(object):
 
         :param count: The number of bytes in this entire sequence.
         :param mask: The mask to apply to the byte at this position.
-        :param cmp: The value of masked bits, (without shifting).
+        :param value: The value of masked bits, (without shifting).
         :param bits: The number of bits.
         """
         self.count = count
         self.mask = mask
-        self.cmp = cmp
+        self.value = value
         self.bits = bits
         self.mask2 = (1 << bits) - 1
 
@@ -142,7 +160,7 @@ class DecodeMap(object):
 
         :raises: UnicodeDecodeError if maked bits don't match.
         """
-        if byte & self.mask == self.cmp:
+        if byte & self.mask == self.value:
             value <<= self.bits
             value |= byte & self.mask2
         else:
@@ -156,7 +174,7 @@ class DecodeMap(object):
         return "DecodeMap({})".format(
             ', '.join(
                 '{}=0x{:02x}'.format(n, getattr(self, n))
-                for n in ('count', 'mask', 'cmp', 'bits', 'mask2')
+                for n in ('count', 'mask', 'value', 'bits', 'mask2')
             )
         )
 
@@ -243,7 +261,8 @@ def decoder(data):
                 )
         else:                       # 0xxxxxxx
             value = d
-        yield six.unichr(value)
+        # noinspection PyCompatibility
+        yield mutf8_unichr(value)
 
 
 def decode(data, errors='strict'):

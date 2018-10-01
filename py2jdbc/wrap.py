@@ -39,7 +39,7 @@ class JavaException(Exception):
                     throwable = base_class(e.throwable)
                     break
         else:
-            raise RuntimeError("exception raised with %s class" % jni.get_class_name(e.throwable))
+            raise RuntimeError("exception raised with %s class" % jni.get_class_name(env, e.throwable))
         ste = env.classes['java.lang.StackTraceElement']
         message = ['Exception in thread "main" {}'.format(throwable.getMessage())]
         log.info('message=%r', message)
@@ -426,7 +426,7 @@ class JClass(object):
         """
         return JConstructor(self, signature)
 
-    def __call__(self, *values, obj=None):
+    def __call__(self, *values, **kwargs):
         """
         By convention, we create instances of classes by calling the
         class wrapper.  So something like this:
@@ -438,7 +438,7 @@ class JClass(object):
         :param obj: first argument is the jobject value
         :return: an object instance from the jobject value
         """
-        return Object.Instance(self, obj)
+        return Object.Instance(self, kwargs.get('obj'))
 
 
 class Object(JClass):
@@ -452,7 +452,7 @@ class Object(JClass):
         def __init__(self, cls, obj):
             self.cls = cls
             self.obj = obj
-            self.equals = lambda *a, o=obj: cls.equals(o, *a)
+            self.equals = lambda other, o=obj: cls.equals(o, other)
             self.hashCode = lambda o=obj: cls.hashCode(o)
             self.toString = lambda o=obj: cls.toString(o)
             self.getClass = lambda o=obj: cls.getClass(o)
@@ -1004,13 +1004,13 @@ class Calendar(Object):
     class Instance(Object.Instance):
         def __init__(self, cls, obj):
             super(Calendar.Instance, self).__init__(cls, obj)
-            self.get = lambda *a, o=obj: cls.get(o, *a)
+            self.get = lambda flag, o=obj: cls.get(o, flag)
             self.getTimeInMillis = lambda o=obj: cls.getTimeInMillis(o)
             self._set2 = lambda o=obj, *a: cls._set2(o, *a)
             self._set3 = lambda o=obj, *a: cls._set3(o, *a)
             self._set5 = lambda o=obj, *a: cls._set5(o, *a)
             self._set6 = lambda o=obj, *a: cls._set6(o, *a)
-            self.setTimeInMillis = lambda *a, o=obj: cls.setTimeInMillis(o, *a)
+            self.setTimeInMillis = lambda millis, o=obj: cls.setTimeInMillis(o, millis)
 
         @property
         def AM_PM(self):

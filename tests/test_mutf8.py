@@ -1,5 +1,6 @@
 # -*- coding: utf8 -*-
 import codecs
+import sys
 import six
 from py2jdbc import mutf8
 import pytest
@@ -18,7 +19,7 @@ def decode(data, **kwargs):
 
 def _pairs(*args):
     for a, b in args:
-        yield six.unichr(a), six.b('').join(six.int2byte(x) for x in b)
+        yield mutf8.mutf8_unichr(a), six.b('').join(six.int2byte(x) for x in b)
 
 
 def test_empty():
@@ -154,22 +155,22 @@ def test_decode_map():
     dm = mutf8.DecodeMap(2, 0xc0, 0x80, 6)
     assert dm.count == 2
     assert dm.mask == 0xc0
-    assert dm.cmp == 0x80
+    assert dm.value == 0x80
     assert dm.bits == 6
     assert dm.mask2 == 0x3f
-    assert repr(dm) == 'DecodeMap(count=0x02, mask=0xc0, cmp=0x80, bits=0x06, mask2=0x3f)'
+    assert repr(dm) == 'DecodeMap(count=0x02, mask=0xc0, value=0x80, bits=0x06, mask2=0x3f)'
 
 
 def test_errors():
-    bad_char = six.unichr(0x100000)
+    bad_char = mutf8.mutf8_unichr(0xd800) + 'b'
     with pytest.raises(UnicodeEncodeError):
         encode(bad_char)
     with pytest.raises(UnicodeEncodeError):
         encode(bad_char, errors='strict')
     assert encode(bad_char, errors='ignore') == six.b('')
     assert encode(bad_char, errors='replace') == six.b('?')
-    assert encode(bad_char, errors='xmlcharrefreplace') == six.b('&#1048576;')
-    assert encode(bad_char, errors='backslashreplace') == six.b('\\U00100000')
+    assert encode(bad_char, errors='xmlcharrefreplace') == six.b('&#{};'.format(0xd800))
+    assert encode(bad_char, errors='backslashreplace') == six.b('\\U0000D800')
     for bad_char in (six.b(x) for x in (
         '\xff',
         '\xed\xff',

@@ -6,6 +6,8 @@ from ctypes.util import find_library
 
 platform = sys.platform
 
+CP_SEP = ';' if platform == 'win32' else ':'
+
 if platform == 'win32':
     try:
         # noinspection PyUnresolvedReferences
@@ -116,9 +118,8 @@ def get_classpath(*paths):
     :param paths: paths to search (if directory) or append (if file)
     :return: a platform appropriate classpath
     """
-    sep = ';' if platform == 'win32' else ':'
     cp = os.getenv('CLASSPATH')
-    cp = cp.split(sep) if cp else []
+    cp = cp.split(CP_SEP) if cp else []
     for path in paths:
         if os.path.isdir(path):
             for fn in os.listdir(path):
@@ -127,4 +128,4 @@ def get_classpath(*paths):
                     cp.append(fn)
         elif os.path.isfile(path):
             cp.append(path)
-    return sep.join(cp)
+    return CP_SEP.join(cp)

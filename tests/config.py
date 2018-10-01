@@ -1,6 +1,7 @@
 # -*- coding: utf8 -*-
 import os
 from py2jdbc.jni import JNI_FALSE, JNI_TRUE
+from py2jdbc.jvm import CP_SEP
 
 BOOLEANS = JNI_FALSE, JNI_TRUE
 MIN_BYTE = -0x80
@@ -23,7 +24,7 @@ ERR_DOUBLE = 1e-30
 CWD = os.path.dirname(os.path.realpath(__file__))
 LIB = os.path.join(CWD, 'lib')
 SRC = os.path.join(CWD, 'src')
-CLASSPATH = ':'.join([
+CLASSPATH = CP_SEP.join([
     os.path.join(SRC),
     os.path.join(LIB, 'sqlite-jdbc-3.23.1.jar'),
 ])

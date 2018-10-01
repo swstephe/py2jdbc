@@ -1,7 +1,9 @@
 # -*- coding: utf8 -*-
 import random
+import six
 from ctypes import byref, string_at
 import logging
+# noinspection PyPackageRequirements
 import pytest
 from tests.config import (
     CLASSPATH, JAVA_OPTS, BOOLEANS,
@@ -301,11 +303,12 @@ def test_string():
 
 
 def _utf(src):
-    s = _env.NewStringUTF(src)
+    src_utf = jni.encode(six.u(src))
+    s = _env.NewStringUTF(src_utf)
     assert s is not None
     jni.check_exception(_env)
     assert _env.GetObjectRefType(s) == jni.jobjectType.JNILocalRefType
-    assert _env.GetStringUTFLength(s) == len(jni.encode(src)) - 1
+    assert _env.GetStringUTFLength(s) == len(src_utf) - 1
     jni.check_exception(_env)
     chars = _env.GetStringUTFChars(s, None)
     assert chars is not None
