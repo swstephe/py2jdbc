@@ -7,13 +7,12 @@ from setuptools import setup
 
 setup(
     name='py2jdbc',
-    version='0.0.2',
+    version='0.0.3',
     license='BSD 2-Clause License',
     description="Python DBI interface to JDBC databases",
     long_description="""
 ``py2jdbc`` is an open source Python module that accesses JDBC-compliant databases.
-It implements the [DB API 2.0](https://www.python.orgfdev/peps/pep-0249)
-specification.
+It implements the DB API 2.0 specification.
 
 - Documentation: http://py2jdbc.readthedocs.org/
 - Source: https://github.com/swstephe/py2jdbc

@@ -5,7 +5,7 @@ from . import util
 from . import wrap
 from . import exc
 
-version = '0.0.2'
+version = '0.0.3'
 apilevel = '2.0'
 threadsafety = 1
 paramstyle = 'qmark'

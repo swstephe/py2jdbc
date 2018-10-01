@@ -1,9 +1,11 @@
 language: python
 sudo: false
 python:
-  - "3.7"
+  - "3.6"
 
 install:
+  - pip install six
   - python setup.py install
 
-script: true
+script:
+  - pytest
