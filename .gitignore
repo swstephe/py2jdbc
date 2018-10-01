@@ -8,7 +8,7 @@ MANIFEST
 build
 dist
 htmlcov
-p2jdbc.egg-info
-p2jdbc.conf
+py2jdbc.egg-info
+py2jdbc.conf
 TAGS
 tmp
