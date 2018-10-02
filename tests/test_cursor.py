@@ -179,6 +179,9 @@ def test_executemany_generator():
     cu.execute("delete from tests")
     cu.executemany("insert into tests(id, name) values (?, ?)", mygen())
     assert cu.rowcount == 5
+    cu.execute("select count(*) from tests")
+    row = cu.fetchone()
+    assert row[0] == 5
 
 
 def test_executemany_wrong_sql_arg():

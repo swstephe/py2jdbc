@@ -93,7 +93,6 @@ def date_format(fn, fmt, fn2=None):
 def fetch_funcs(rs):
     env = rs.env
     meta = env.classes['java.sql.ResultSetMetaData'](rs.getMetaData())
-    print('SQLState', rs.getSQLState())
     count = meta.getColumnCount()
     errors = []
     for i in range(count):

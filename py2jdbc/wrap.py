@@ -1349,6 +1349,56 @@ class Enumeration(Object):
         return Enumeration.Instance(self, obj)
 
 
+class ParameterMetaData(Object):
+    """
+    Wrapper for java.sql.ParameterMetaData interface.
+    """
+    class Instance(Object.Instance):
+        """
+        Wrapper for java.sql.ParameterMetaData object instance
+        """
+        def __init__(self, cls, obj):
+            super(ParameterMetaData.Instance, self).__init__(cls, obj)
+            self.getParameterClassName = lambda i, o=obj: cls.getParameterClassName(o, i)
+            self.getParameterCount = lambda o=obj: cls.getParameterCount(o)
+            self.getParameterMode = lambda i, o=obj: cls.getParameterMode(o, i)
+            self.getParameterType = lambda i, o=obj: cls.getParameterType(o, i)
+            self.getParameterTypeName = lambda i, o=obj: cls.getParameterTypeName(o, i)
+            self.getPrecision = lambda i, o=obj: cls.getPrecision(o, i)
+            self.getScale = lambda i, o=obj: cls.getScale(o, i)
+            self.isNullable = lambda i, o=obj: cls.isNullable(o, i)
+            self.isSigned = lambda i, o=obj: cls.isSigned(o, i)
+
+    def __init__(self, env, class_name='java.sql.ParameterMetaData'):
+        super(ParameterMetaData, self).__init__(env, class_name=class_name)
+        self.getParameterClassName = self.method(
+            'getParameterClassName',
+            '(I)Ljava/lang/String;'
+        )
+        self.getParameterCount = self.method('getParameterCount', '()I')
+        self.getParameterMode = self.method('getParameterMode', '(I)I')
+        self.getParameterType = self.method('getParameterType', '(I)I')
+        self.getParameterTypeName = self.method(
+            'getParameterTypeName',
+            '(I)Ljava/lang/String;'
+        )
+        self.getPrecision = self.method('getPrecision', '(I)I')
+        self.getScale = self.method('getScale', '(I)I')
+        self.isNullable = self.method('isNullable', '(I)I')
+        self.isSigned = self.method('isSigned', '(I)Z')
+        self.parameterModeIn = self.static_field('parameterModeIn', 'I')
+        self.parameterModeInOut = self.static_field('parameterModeInOut', 'I')
+        self.parameterModeOut = self.static_field('parameterModeOut', 'I')
+        self.parameterModeUnknown = self.static_field('parameterModeUnknown', 'I')
+        self.parameterNoNulls = self.static_field('parameterNoNulls', 'I')
+        self.parameterNullable = self.static_field('parameterNullable', 'I')
+        self.parameterNullableUnknown = self.static_field('parameterNullableUnknown', 'I')
+
+
+    def __call__(self, obj):
+        return ParameterMetaData.Instance(self, obj)
+
+
 class PreparedStatement(Object):
     """
     Wrapper for java.sql.PreparedStatement java class.
@@ -1364,6 +1414,7 @@ class PreparedStatement(Object):
             self.close = lambda o=obj: cls.close(o)
             self.execute = lambda o=obj: cls.execute(o)
             self.executeBatch = lambda o=obj: cls.executeBatch(o)
+            self.getParameterMetaData = lambda o=obj: cls.getParameterMetaData(o)
             self.getResultSet = lambda o=obj: cls.getResultSet(o)
             self.getUpdateCount = lambda o=obj: cls.getUpdateCount(o)
             self.setByte = lambda i, v, o=obj: cls.setByte(o, i, v)
@@ -1381,6 +1432,10 @@ class PreparedStatement(Object):
         self.close = self.method('close', '()V')
         self.execute = self.method('execute', '()Z')
         self.executeBatch = self.method('executeBatch', '()[I')
+        self.getParameterMetaData = self.method(
+            'getParameterMetaData',
+            '()Ljava/sql/ParameterMetaData;'
+        )
         self.getResultSet = self.method('getResultSet', '()Ljava/sql/ResultSet;')
         self.getUpdateCount = self.method('getUpdateCount', '()I')
         self.setByte = self.method('setByte', '(IB)V')

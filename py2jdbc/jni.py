@@ -2575,7 +2575,6 @@ def get_env(**kwargs):
                     opts.append('-Xcheck:{}'.format(v))
                 else:
                     opts += ['-Xcheck:{}'.format(x) for x in v]
-        print('opts', opts)
         if opts:
             options = JavaVMOption.__mul__(len(opts))()
             for i, opt in enumerate(opts):

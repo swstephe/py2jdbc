@@ -8,7 +8,7 @@ NAME = 'mutf8'      # not cesu-8, which uses a different zero-byte
 
 
 def mutf8_unichr(value):
-    return six.u("\\U%08x" % value)
+    return chr(value) if six.PY3 else six.u('\\U%08x' % value)
 
 
 def _bytes(*vals):

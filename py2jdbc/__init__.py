@@ -166,8 +166,24 @@ class Cursor(object):
         except wrap.JavaException as e:
             raise DatabaseError(e.message)
 
+        pmd = _env.classes['java.sql.ParameterMetaData'](stmt.getParameterMetaData())
+        print('pmd', pmd)
+        for i in range(pmd.getParameterCount()):
+            print(
+                '-',
+                pmd.getParameterClassName(i + 1),
+                pmd.getParameterMode(i + 1),
+                pmd.getParameterType(i + 1),
+                pmd.getParameterTypeName(i + 1),
+                pmd.getPrecision(i + 1),
+                pmd.getScale(i + 1),
+                pmd.isNullable(i + 1),
+                pmd.isSigned(i + 1)
+            )
+
         funcs = util.bind_funcs(rows)
         for row in rows:
+            print('row', row)
             row = tuple(row)
             util.bind_row(stmt, funcs, row)
             stmt.addBatch()
