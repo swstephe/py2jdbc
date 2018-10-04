@@ -2613,8 +2613,8 @@ def destroy_vm():
 def check_exception(env):
     throwable = env.ExceptionOccurred()
     if throwable:
-        if log.getEffectiveLevel() == logging.DEBUG:
-            env.ExceptionDescribe()
+        # if log.getEffectiveLevel() == logging.DEBUG:
+        env.ExceptionDescribe()
         env.ExceptionClear()
         raise JavaException(env, throwable)
 
