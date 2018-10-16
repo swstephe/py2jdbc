@@ -1,6 +1,7 @@
 # -*- coding: utf8 -*-
 import logging
-from py2jdbc import wrap
+from py2jdbc.wrap import get_env
+from py2jdbc.util import GregorianCalendar
 from tests.config import JAVA_OPTS
 
 log = logging.getLogger(__name__)
@@ -11,11 +12,11 @@ _env = None
 
 def setup_module():
     global _env
-    _env = wrap.get_env(**JAVA_OPTS)
+    _env = get_env(**JAVA_OPTS)
 
 
 def test_calendar():
-    cls = _env.classes['java.util.GregorianCalendar']
+    cls = _env.get('java.util.GregorianCalendar')
     assert cls is not None
     cal = cls.new(2018, 9, 26)
     assert cal.ERA == cls.AD

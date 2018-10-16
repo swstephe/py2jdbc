@@ -1,7 +1,10 @@
 # -*- coding: utf8 -*-
 import logging
 import six
-from tests.config import CLASSPATH
+from tests.config import (
+    CLASSPATH,
+    MAX_INT
+)
 import py2jdbc
 import pytest
 
@@ -162,6 +165,19 @@ def test_rowcount_executemany():
     assert cu.rowcount == 3
 
 
+def test_rowcount_executemany2():
+    global cx
+    with cx.cursor() as c:
+        c.execute("delete from tests")
+        c.executemany("insert into tests(id, name) values (?, ?)", [
+            (1, 'test_rowcount_executemany2'),
+            (2, 'test_rowcount_executemany2'),
+            (3, 'test_rowcount_executemany2'),
+            (4, 'test_rowcount_executemany2')
+        ])
+        assert c.rowcount == 4
+
+
 def test_executemany_sequence():
     cu.execute("delete from tests")
     cu.executemany("insert into tests(id, name, real_field) values (?, ?, ?)", [
@@ -254,6 +270,23 @@ def test_fetchmany_kwargs():
     cu.execute("select name from tests")
     res = cu.fetchmany(size=100)
     assert len(res) == 1
+
+
+def test_description():
+    global cu
+    cu.execute("select * from tests")
+    assert cu.description == [
+        ['id', py2jdbc.INTEGER, MAX_INT, None, 0, 0, False],
+        ['name', py2jdbc.TEXT, MAX_INT, None, 0, 0, True],
+        ['integer_field', py2jdbc.INTEGER, MAX_INT, None, 0, 0, True],
+        ['real_field', py2jdbc.REAL, MAX_INT, None, 0, 0, True],
+        ['text_field', py2jdbc.TEXT, MAX_INT, None, 0, 0, True],
+        ['blob_field', py2jdbc.BLOB, MAX_INT, None, 0, 0, True],
+    ]
+    cu.execute("select null from tests")
+    assert cu.description == [
+        ['null', py2jdbc.NULL, MAX_INT, None, 0, 0, True],
+    ]
 
 
 # def test_fetchall():

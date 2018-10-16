@@ -3,7 +3,6 @@ import atexit
 import codecs
 import logging
 import six
-import threading
 
 from ctypes import (
     c_void_p, c_char_p,
@@ -201,8 +200,19 @@ class JavaException(Exception):
     Wait until "wrap" layer to unroll the exception details into a Python exception.
     """
     def __init__(self, env, throwable):
+        print('JavaException(%r, %r)' % (env, throwable))
         self.env = env
         self.throwable = throwable
+
+
+class NullResultException(Exception):
+    """
+    A JNI function returned NNULL
+    """
+    def __init__(self, env, *args):
+        print('NullResultException(%r, %r)' % (env, args))
+        self.env = env
+        super(NullResultException, self).__init__(*args)
 
 
 class JavaVM(Structure):
@@ -346,7 +356,11 @@ class JNIEnv(Structure):
         :param name: The class name
         :return: the jclass object pointer
         """
-        return self.functions[0].FindClass(self, encode(name.replace('.', '/')))
+        class_object = self.functions[0].FindClass(self, encode(name.replace('.', '/')))
+        self.check_exception()
+        if class_object is None:
+            raise NullResultException(self, name)
+        return class_object
 
     def FromReflectedMethod(self, method):
         """
@@ -356,7 +370,11 @@ class JNIEnv(Structure):
         :param method: the java.lang.reflect.X object
         :return: the methodID
         """
-        return self.functions[0].FromReflectedMethod(self, method)
+        mid = self.functions[0].FromReflectedMethod(self, method)
+        self.check_exception()
+        if mid is None:
+            raise NullResultException(self, method)
+        return mid
 
     def FromReflectedField(self, field):
         """
@@ -365,7 +383,11 @@ class JNIEnv(Structure):
         :param field: the java.lang.reflect.Field object
         :return: the fieldID
         """
-        return self.functions[0].FromReflectedField(self, field)
+        fid = self.functions[0].FromReflectedField(self, field)
+        self.check_exception()
+        if fid is None:
+            raise NullResultException(self, field)
+        return fid
 
     def ToReflectedMethod(self, clazz, mid, is_static):
         """
@@ -378,7 +400,11 @@ class JNIEnv(Structure):
         :param is_static: JNI_TRUE if the method is static
         :return: the java.lang.reflect.X method object
         """
-        return self.functions[0].ToReflectedMethod(self, clazz, mid, is_static)
+        obj = self.functions[0].ToReflectedMethod(self, clazz, mid, is_static)
+        self.check_exception()
+        if obj is None:
+            raise NullResultException(self, clazz, mid, is_static)
+        return obj
 
     def GetSuperclass(self, clazz):
         """
@@ -422,8 +448,13 @@ class JNIEnv(Structure):
 
         :param obj: a java.lang.Throwable object.
         :return: 0 on success; a negative value on failure.
+        :raises JavaException on exception
+            RuntimeError if exception couldn't be thrown
         """
-        return self.functions[0].Throw(self, obj)
+        result = self.functions[0].Throw(self, obj)
+        self.check_exception()
+        if result != 0:
+            raise RuntimeError("couldn't throw exception")
 
     def ThrowNew(self, clazz, msg):
         """
@@ -459,6 +490,22 @@ class JNIEnv(Structure):
         being thrown, this routine has no effect.
         """
         self.functions[0].ExceptionClear(self)
+
+    def check_exception(self):
+        """
+        Utility for checking if an exception occurred, and if so, raise
+        a Python exception containing the Throwable object.
+        """
+        throwable = self.ExceptionOccurred()
+        if throwable:
+            print('check_exception')
+            # if log.getEffectiveLevel() == logging.DEBUG:
+            print('ExceptionDescribe()')
+            self.ExceptionDescribe()
+            print('ExceptionClear()')
+            self.ExceptionClear()
+            print('raise JavaException()')
+            raise JavaException(self, throwable)
 
     def FatalError(self, msg):
         """
@@ -557,7 +604,9 @@ class JNIEnv(Structure):
         :param clazz: Any class except array classes.
         :return: a reference to the object.
         """
-        return self.functions[0].AllocObject(self, clazz)
+        obj = self.functions[0].AllocObject(self, clazz)
+        self.check_exception()
+        return obj
 
     def NewObjectA(self, clazz, mid, args):
         """
@@ -568,7 +617,11 @@ class JNIEnv(Structure):
         :param args: a jvalue array of parameters
         :return: the created object.
         """
-        return self.functions[0].NewObjectA(self, clazz, mid, args)
+        obj = self.functions[0].NewObjectA(self, clazz, mid, args)
+        self.check_exception()
+        if obj is None:
+            raise NullResultException(self, clazz, mid, args)
+        return obj
 
     def GetObjectClass(self, obj):
         """
@@ -599,7 +652,11 @@ class JNIEnv(Structure):
         :param sig: the signature name
         :return: a method ID or None if the method can't be found
         """
-        return self.functions[0].GetMethodID(self, clazz, encode(name), encode(sig))
+        mid = self.functions[0].GetMethodID(self, clazz, encode(name), encode(sig))
+        self.check_exception()
+        if mid is None:
+            raise NullResultException(self, clazz, name, sig)
+        return mid
 
     def CallObjectMethodA(self, obj, mid, args):
         """
@@ -610,7 +667,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: a jobject reference to the object returned by the method
         """
-        return self.functions[0].CallObjectMethodA(self, obj, mid, args)
+        result = self.functions[0].CallObjectMethodA(self, obj, mid, args)
+        self.check_exception()
+        return result
 
     def CallBooleanMethodA(self, obj, mid, args):
         """
@@ -621,7 +680,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: a jboolean returned by the method
         """
-        return self.functions[0].CallBooleanMethodA(self, obj, mid, args)
+        result = self.functions[0].CallBooleanMethodA(self, obj, mid, args)
+        self.check_exception()
+        return result
 
     def CallByteMethodA(self, obj, mid, args):
         """
@@ -632,7 +693,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: a jbyte returned by the method
         """
-        return self.functions[0].CallByteMethodA(self, obj, mid, args)
+        result = self.functions[0].CallByteMethodA(self, obj, mid, args)
+        self.check_exception()
+        return result
 
     def CallCharMethodA(self, obj, mid, args):
         """
@@ -643,7 +706,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: a jchar returned by the method
         """
-        return self.functions[0].CallCharMethodA(self, obj, mid, args)
+        result = self.functions[0].CallCharMethodA(self, obj, mid, args)
+        self.check_exception()
+        return result
 
     def CallShortMethodA(self, obj, mid, args):
         """
@@ -654,7 +719,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: a jshort returned by the method
         """
-        return self.functions[0].CallShortMethodA(self, obj, mid, args)
+        result = self.functions[0].CallShortMethodA(self, obj, mid, args)
+        self.check_exception()
+        return result
 
     def CallIntMethodA(self, obj, mid, args):
         """
@@ -665,7 +732,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: a jint returned by the method
         """
-        return self.functions[0].CallIntMethodA(self, obj, mid, args)
+        result = self.functions[0].CallIntMethodA(self, obj, mid, args)
+        self.check_exception()
+        return result
 
     def CallLongMethodA(self, obj, mid, args):
         """
@@ -676,7 +745,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: a jlong returned by the method
         """
-        return self.functions[0].CallLongMethodA(self, obj, mid, args)
+        result = self.functions[0].CallLongMethodA(self, obj, mid, args)
+        self.check_exception()
+        return result
 
     def CallFloatMethodA(self, obj, mid, args):
         """
@@ -687,7 +758,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: a jfloat returned by the method
         """
-        return self.functions[0].CallFloatMethodA(self, obj, mid, args)
+        result = self.functions[0].CallFloatMethodA(self, obj, mid, args)
+        self.check_exception()
+        return result
 
     def CallDoubleMethodA(self, obj, mid, args):
         """
@@ -698,7 +771,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: a jdouble returned by the method
         """
-        return self.functions[0].CallDoubleMethodA(self, obj, mid, args)
+        result = self.functions[0].CallDoubleMethodA(self, obj, mid, args)
+        self.check_exception()
+        return result
 
     def CallVoidMethodA(self, obj, mid, args):
         """
@@ -709,6 +784,7 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         """
         self.functions[0].CallVoidMethodA(self, obj, mid, args)
+        self.check_exception()
 
     def CallNonvirtualObjectMethodA(self, obj, clazz, mid, args):
         """
@@ -720,7 +796,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: the Object return value
         """
-        return self.functions[0].CallNonvirtualObjectMethodA(self, obj, clazz, mid, args)
+        result = self.functions[0].CallNonvirtualObjectMethodA(self, obj, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallNonvirtualBooleanMethodA(self, obj, clazz, mid, args):
         """
@@ -732,7 +810,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: the jboolean return value
         """
-        return self.functions[0].CallNonvirtualBooleanMethodA(self, obj, clazz, mid, args)
+        result = self.functions[0].CallNonvirtualBooleanMethodA(self, obj, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallNonvirtualByteMethodA(self, obj, clazz, mid, args):
         """
@@ -744,7 +824,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: the byte return value
         """
-        return self.functions[0].CallNonvirtualByteMethodA(self, obj, clazz, mid, args)
+        result = self.functions[0].CallNonvirtualByteMethodA(self, obj, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallNonvirtualCharMethodA(self, obj, clazz, mid, args):
         """
@@ -756,7 +838,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: the jchar return value
         """
-        return self.functions[0].CallNonvirtualCharMethodA(self, obj, clazz, mid, args)
+        result = self.functions[0].CallNonvirtualCharMethodA(self, obj, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallNonvirtualShortMethodA(self, obj, clazz, mid, args):
         """
@@ -768,7 +852,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: the short return value
         """
-        return self.functions[0].CallNonvirtualShortMethodA(self, obj, clazz, mid, args)
+        result = self.functions[0].CallNonvirtualShortMethodA(self, obj, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallNonvirtualIntMethodA(self, obj, clazz, mid, args):
         """
@@ -780,7 +866,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: the int return value
         """
-        return self.functions[0].CallNonvirtualIntMethodA(self, obj, clazz, mid, args)
+        result = self.functions[0].CallNonvirtualIntMethodA(self, obj, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallNonvirtualLongMethodA(self, obj, clazz, mid, args):
         """
@@ -792,7 +880,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: the long return value
         """
-        return self.functions[0].CallNonvirtualLongMethodA(self, obj, clazz, mid, args)
+        result = self.functions[0].CallNonvirtualLongMethodA(self, obj, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallNonvirtualFloatMethodA(self, obj, clazz, mid, args):
         """
@@ -804,7 +894,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: the float return value
         """
-        return self.functions[0].CallNonvirtualFloatMethodA(self, obj, clazz, mid, args)
+        result = self.functions[0].CallNonvirtualFloatMethodA(self, obj, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallNonvirtualDoubleMethodA(self, obj, clazz, mid, args):
         """
@@ -816,7 +908,9 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         :return: the double return value
         """
-        return self.functions[0].CallNonvirtualDoubleMethodA(self, obj, clazz, mid, args)
+        result = self.functions[0].CallNonvirtualDoubleMethodA(self, obj, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallNonvirtualVoidMethodA(self, obj, clazz, mid, args):
         """
@@ -828,6 +922,7 @@ class JNIEnv(Structure):
         :param args: a jvalue array of method arguments
         """
         self.functions[0].CallNonvirtualVoidMethodA(self, obj, clazz, mid, args)
+        self.check_exception()
 
     def GetFieldID(self, clazz, name, sig):
         """
@@ -841,7 +936,11 @@ class JNIEnv(Structure):
         :param sig: the signature of the field
         :return: the fieldID object or None if the operation fails.
         """
-        return self.functions[0].GetFieldID(self, clazz, encode(name), encode(sig))
+        fid = self.functions[0].GetFieldID(self, clazz, encode(name), encode(sig))
+        self.check_exception()
+        if fid is None:
+            raise NullResultException(clazz, name, sig)
+        return fid
 
     def GetObjectField(self, obj, fid):
         """
@@ -1033,12 +1132,16 @@ class JNIEnv(Structure):
         :param signature: the static method signature
         :return: a method ID or None if operation fails
         """
-        return self.functions[0].GetStaticMethodID(
+        mid = self.functions[0].GetStaticMethodID(
             self,
             clazz,
             encode(name),
             encode(signature)
         )
+        self.check_exception()
+        if mid is None:
+            raise NullResultException(self, clazz, name, signature)
+        return mid
 
     def CallStaticObjectMethodA(self, clazz, mid, args):
         """
@@ -1049,7 +1152,11 @@ class JNIEnv(Structure):
         :param args: an array of jvalue method arguments
         :return: an object reference
         """
-        return self.functions[0].CallStaticObjectMethodA(self, clazz, mid, args)
+        result = self.functions[0].CallStaticObjectMethodA(self, clazz, mid, args)
+        self.check_exception()
+        if result is None:
+            raise NullResultException(self, clazz, mid, args)
+        return result
 
     def CallStaticBooleanMethodA(self, clazz, mid, args):
         """
@@ -1060,7 +1167,9 @@ class JNIEnv(Structure):
         :param args: an array of jvalue method arguments
         :return: a jboolean
         """
-        return self.functions[0].CallStaticBooleanMethodA(self, clazz, mid, args)
+        result = self.functions[0].CallStaticBooleanMethodA(self, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallStaticByteMethodA(self, clazz, mid, args):
         """
@@ -1071,7 +1180,9 @@ class JNIEnv(Structure):
         :param args: an array of jvalue method arguments
         :return: a jbyte
         """
-        return self.functions[0].CallStaticByteMethodA(self, clazz, mid, args)
+        result = self.functions[0].CallStaticByteMethodA(self, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallStaticCharMethodA(self, clazz, mid, args):
         """
@@ -1082,7 +1193,9 @@ class JNIEnv(Structure):
         :param args: an array of jvalue method arguments
         :return: a jchar
         """
-        return self.functions[0].CallStaticCharMethodA(self, clazz, mid, args)
+        result = self.functions[0].CallStaticCharMethodA(self, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallStaticShortMethodA(self, clazz, mid, args):
         """
@@ -1093,7 +1206,9 @@ class JNIEnv(Structure):
         :param args: an array of jvalue method arguments
         :return: a jshort
         """
-        return self.functions[0].CallStaticShortMethodA(self, clazz, mid, args)
+        result = self.functions[0].CallStaticShortMethodA(self, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallStaticIntMethodA(self, clazz, mid, args):
         """
@@ -1104,7 +1219,9 @@ class JNIEnv(Structure):
         :param args: an array of jvalue method arguments
         :return: a jint
         """
-        return self.functions[0].CallStaticIntMethodA(self, clazz, mid, args)
+        result = self.functions[0].CallStaticIntMethodA(self, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallStaticLongMethodA(self, clazz, mid, args):
         """
@@ -1115,7 +1232,9 @@ class JNIEnv(Structure):
         :param args: an array of jvalue method arguments
         :return: a jlong
         """
-        return self.functions[0].CallStaticLongMethodA(self, clazz, mid, args)
+        result = self.functions[0].CallStaticLongMethodA(self, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallStaticFloatMethodA(self, clazz, mid, args):
         """
@@ -1126,7 +1245,9 @@ class JNIEnv(Structure):
         :param args: an array of jvalue method arguments
         :return: a jfloat
         """
-        return self.functions[0].CallStaticFloatMethodA(self, clazz, mid, args)
+        result = self.functions[0].CallStaticFloatMethodA(self, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallStaticDoubleMethodA(self, clazz, mid, args):
         """
@@ -1137,7 +1258,9 @@ class JNIEnv(Structure):
         :param args: an array of jvalue method arguments
         :return: a jdouble
         """
-        return self.functions[0].CallStaticDoubleMethodA(self, clazz, mid, args)
+        result = self.functions[0].CallStaticDoubleMethodA(self, clazz, mid, args)
+        self.check_exception()
+        return result
 
     def CallStaticVoidMethodA(self, clazz, mid, args):
         """
@@ -1148,6 +1271,7 @@ class JNIEnv(Structure):
         :param args: an array of jvalue method arguments
         """
         self.functions[0].CallStaticVoidMethodA(self, clazz, mid, args)
+        self.check_exception()
 
     def GetStaticFieldID(self, clazz, name, sig):
         """
@@ -1159,7 +1283,11 @@ class JNIEnv(Structure):
         :param sig: the static field signature
         :return: a field ID or None if the static field cannot be found.
         """
-        return self.functions[0].GetStaticFieldID(self, clazz, encode(name), encode(sig))
+        fid = self.functions[0].GetStaticFieldID(self, clazz, encode(name), encode(sig))
+        self.check_exception()
+        if fid is None:
+            raise NullResultException(self, clazz, name, sig)
+        return fid
 
     def GetStaticObjectField(self, clazz, fid):
         """
@@ -1349,7 +1477,11 @@ class JNIEnv(Structure):
         :param p_len: length of unicode string
         :return: a Java string object, or None if the string cannot be constructed.
         """
-        return self.functions[0].NewString(self, p_unicode, p_len)
+        obj = self.functions[0].NewString(self, p_unicode, p_len)
+        self.check_exception()
+        if obj is None:
+            raise NullResultException(self, p_unicode, p_len)
+        return obj
 
     def GetStringLength(self, p_str):
         """
@@ -2508,8 +2640,7 @@ JNI_VERSION_1_8 = 0x00010008
 JNI_VERSION_9 = 0x00090000
 JNI_VERSION_10 = 0x000a0000
 
-vm = None
-tlocal = threading.local()
+vm = JavaVM_p()
 ENCODING = mutf8.NAME
 
 
@@ -2549,10 +2680,15 @@ def get_env(**kwargs):
     :return: the local JNIEnv pointer.
     """
     global vm
+
     kwargs.setdefault('classpath', jvm.get_classpath('./lib'))
     kwargs.setdefault('version', JNI_VERSION_1_2)
-    if not hasattr(tlocal, 'env'):
-        _env = JNIEnv_p()
+    _env = JNIEnv_p()
+    if vm:
+        ret = vm[0].AttachCurrentThread(byref(_env), None)
+        if ret != JNI_OK:
+            raise RuntimeError("unable to attach to JVM")
+    else:
         vm_args = JavaVMInitArgs()
         vm_args.version = kwargs['version']
         ret = libjvm.JNI_GetDefaultJavaVMInitArgs(byref(vm_args))
@@ -2587,19 +2723,10 @@ def get_env(**kwargs):
         vm_args.nOptions = len(opts)
         vm_args.options = options
         vm_args.ignoreUnrecognized = JNI_FALSE
-        if vm:
-            ret = vm.GetEnv(byref(_env), kwargs['version'])
-            if ret != JNI_OK:
-                ret = libjvm.JNI_AttachCurrentThread(vm, byref(_env), byref(vm_args))
-                if ret != JNI_OK:
-                    raise RuntimeError("couldn't get JVM environment")
-        else:
-            vm = JavaVM_p()
-            ret = libjvm.JNI_CreateJavaVM(byref(vm), byref(_env), byref(vm_args))
-            if ret != JNI_OK:
-                raise RuntimeError("unable to Launch JVM")
-        tlocal.env = _env[0]
-    return tlocal.env
+        ret = libjvm.JNI_CreateJavaVM(byref(vm), byref(_env), byref(vm_args))
+        if ret != JNI_OK:
+            raise RuntimeError("unable to Launch JVM")
+    return _env[0]
 
 
 def destroy_vm():
@@ -2607,16 +2734,7 @@ def destroy_vm():
     if vm:
         vm[0].DetachCurrentThread()
         vm[0].DestroyJavaVM()
-        vm = None
-
-
-def check_exception(env):
-    throwable = env.ExceptionOccurred()
-    if throwable:
-        # if log.getEffectiveLevel() == logging.DEBUG:
-        env.ExceptionDescribe()
-        env.ExceptionClear()
-        raise JavaException(env, throwable)
+        vm.values = None
 
 
 def get_class_name(env, obj):
@@ -2628,27 +2746,13 @@ def get_class_name(env, obj):
     :return: a Python string name of the Java object class
     """
     class1 = env.GetObjectClass(obj)
-    check_exception(env)
-    assert class1 is not None
     mid_get_class = env.GetMethodID(class1, 'getClass', '()Ljava/lang/Class;')
-    check_exception(env)
-    assert mid_get_class is not None
     args = jvalue.__mul__(0)()
     obj2 = env.CallObjectMethodA(obj, mid_get_class, args)
-    check_exception(env)
-    assert obj2 is not None
     class2 = env.GetObjectClass(obj2)
-    check_exception(env)
-    assert class2 is not None
     mid_get_name = env.GetMethodID(class2, 'getName', '()Ljava/lang/String;')
-    check_exception(env)
-    assert mid_get_name is not None
     s = env.CallObjectMethodA(class1, mid_get_name, args)
-    check_exception(env)
-    assert s is not None
     chars = env.GetStringUTFChars(s, None)
-    check_exception(env)
-    assert chars is not None
     env.DeleteLocalRef(class1)
     env.DeleteLocalRef(obj2)
     env.DeleteLocalRef(class2)
@@ -2657,3 +2761,12 @@ def get_class_name(env, obj):
 
 
 atexit.register(destroy_vm)
+
+import signal
+import sys
+
+def signal_handler(sig, frame):
+    print("Handle this!")
+    sys.exit(0)
+
+signal.signal(signal.SIGHUP, signal_handler)

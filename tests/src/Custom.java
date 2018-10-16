@@ -11,6 +11,16 @@ public class Custom {
 
     public Custom() {}
 
+    public static boolean staticBooleanField = false;
+    public static byte staticByteField = 0x04;
+    public static char staticCharField = '\u0008';
+    public static short staticShortField = 0x0456;
+    public static int staticIntField = 0x07890123;
+    public static long staticLongField = 0x56789abcL;
+    public static float staticFloatField = 987.453f;
+    public static double staticDoubleField = 789.1234567d;
+    public static String staticStringField = "Sell your cleverness and buy bewilderment.";
+
     public static void staticVoidMethod() {}
     public static boolean staticBooleanMethod() { return false; }
     public static byte staticByteMethod() { return 0x32; }

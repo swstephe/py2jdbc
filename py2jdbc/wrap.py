@@ -1,12 +1,24 @@
 # -*- coding: utf8 -*-
 import logging
-import threading
+import six
 from py2jdbc import jni
 from py2jdbc import sig
 
-
 log = logging.getLogger(__name__)
-tlocal = threading.local()
+
+
+class Register(type):
+    """
+    Metaclass to register classes for loading when ThreadEnv is created.
+    """
+    registry = []
+
+    def __new__(mcs, clsname, bases, attrs):
+        newclass = super(Register, mcs).__new__(mcs, clsname, bases, attrs)
+        class_name = getattr(newclass, 'class_name')
+        if class_name:
+            mcs.registry.append(newclass)
+        return newclass
 
 
 class ThreadEnv(object):
@@ -22,10 +34,13 @@ class ThreadEnv(object):
         """
         self.env = jni.get_env(**kwargs)
         self.classes = {}
-
-    def __del__(self):
-        for cls in self.classes:
-            del cls
+        self.exceptions = (
+            'java.sql.SQLException',
+            'java.lang.Exception',
+            'java.lang.Throwable'
+        )
+        for cls in JClass.registry:
+            cls(self)
 
     @classmethod
     def instance(cls, **kwargs):
@@ -39,19 +54,23 @@ class ThreadEnv(object):
         :param kwargs: jni.JNIEnv.get_env arguments, (like classpath, verbose, etc.)
         :return: the current thread's ThreadEnv object
         """
-        global tlocal
-        if not hasattr(tlocal, 'env'):
-            tlocal.env = cls(**kwargs)
-        return tlocal.env
+        return cls(**kwargs)
 
-    def check_exception(self):
+    def exception(self, e):
         """
         Utility to check if an exception was thrown.  If so, it automatically
         wraps it in a wrap.JavaException object.
 
         :raises: JavaException if an exception occurred.
         """
-        jni.check_exception(self.env)
+        for ec in self.exceptions:
+            e_class = self.classes.get(ec)
+            if e_class and self.env.IsInstanceOf(e.throwable, e_class.cls):
+                return e_class(e.throwable)
+        return e
+
+    def get(self, arg):
+        return self.classes[arg]
 
 
 def get_env(**kwargs):
@@ -108,15 +127,11 @@ class JField(JBase):
         :raises: RuntimeError if the field was not found.
         """
         super(JField, self).__init__(cls, name, signature)
-        self.fid = self.env.GetFieldID(cls.cls, name, signature)
-        if self.fid is None:
-            raise RuntimeError("Failed to find field id for {}.{}/{}".format(
-                cls.class_name,
-                name,
-                signature
-            ))
-        self.restype = next(sig.type_signature(self.env, self.signature))
-        self.cls.env.check_exception()
+        try:
+            self.fid = self.env.GetFieldID(cls.cls, name, signature)
+            self.restype = next(sig.type_signature(self.env, signature))
+        except jni.JavaException as e:
+            raise self.cls.env.exception(e)
 
     def get(self, obj):
         """
@@ -154,15 +169,11 @@ class JMethod(JBase):
         :raises: RuntimeError if the method was not found.
         """
         super(JMethod, self).__init__(cls, name, signature)
-        self.mid = self.env.GetMethodID(cls.cls, name, signature)
-        self.cls.env.check_exception()
-        if self.mid is None:
-            raise RuntimeError("Failed to find method id for {}.{}/{}".format(
-                cls.name,
-                name,
-                signature
-            ))
-        self.argtypes, self.restype = self.get_signature(signature)
+        try:
+            self.mid = self.env.GetMethodID(cls.cls, name, signature)
+            self.argtypes, self.restype = self.get_signature(signature)
+        except jni.JavaException as e:
+            raise self.cls.env.exception(e)
 
     def get_signature(self, signature):
         """
@@ -182,9 +193,10 @@ class JMethod(JBase):
         :param args: Python value arguments
         :return: the result value, or None for Void methods.
         """
-        value = self.restype.call(obj, self.mid, self.argtypes, *args)
-        self.cls.env.check_exception()
-        return value
+        try:
+            return self.restype.call(obj, self.mid, self.argtypes, *args)
+        except jni.JavaException as e:
+            raise self.cls.env.exception(e)
 
 
 class JConstructor(JMethod):
@@ -223,9 +235,36 @@ class JConstructor(JMethod):
         :param args: Python value arguments
         :return: the resulting object instance handle
         """
-        obj = self.restype.new(self.cls.cls, self.mid, self.argtypes, *args)
-        self.cls.env.check_exception()
-        return self.cls(obj)
+        try:
+            obj = self.restype.new(self.cls.cls, self.mid, self.argtypes, *args)
+            return self.cls(obj)
+        except jni.JavaException as e:
+            raise self.cls.env.exception(e)
+
+
+class JStaticField(JBase):
+    """
+    Wraps a java class static field
+    """
+    def __init__(self, cls, name, signature):
+        super(JStaticField, self).__init__(cls, name, signature)
+        try:
+            self.fid = self.env.GetStaticFieldID(cls.cls, name, signature)
+            self.restype = next(sig.type_signature(self.env, signature))
+        except jni.JavaException as e:
+            raise self.cls.env.exception(e)
+
+    def get(self, cls):
+        try:
+            return self.restype.get_static(cls, self.fid)
+        except jni.JavaException as e:
+            raise self.cls.env.exception(e)
+
+    def set(self, cls, value):
+        try:
+            self.restype.set_static(cls, self.fid, value)
+        except jni.JavaException as e:
+            raise self.cls.env.exception(e)
 
 
 class JStaticMethod(JBase):
@@ -236,7 +275,7 @@ class JStaticMethod(JBase):
         """
         Construct a JMethod instance.
 
-        A JField is created when the class is loaded, then attached to instances
+        A JStaticMethod is created when the class is loaded, then attached to instances
         as they are wrapped.
 
         :param cls: a JClass wrapper subclass
@@ -246,9 +285,6 @@ class JStaticMethod(JBase):
         """
         super(JStaticMethod, self).__init__(cls, name, signature)
         self.mid = self.env.GetStaticMethodID(self.cls.cls, name, signature)
-        if self.mid is None:
-            raise RuntimeError("Failed to find static method id for {}.{}/{}".format(
-                self.cls.name, name, signature))
         self.argtypes, self.restype = sig.method_signature(self.env, signature)
 
     def __call__(self, *args):
@@ -258,12 +294,15 @@ class JStaticMethod(JBase):
         :param args: Python value arguments
         :return: the result value, or None for Void static methods.
         """
-        value = self.restype.call_static(self.cls.cls, self.mid, self.argtypes, *args)
-        self.restype.release(value)
-        return value
+        try:
+            value = self.restype.call_static(self.cls.cls, self.mid, self.argtypes, *args)
+            self.restype.release(value)
+            return value
+        except jni.JavaException as e:
+            raise self.cls.env.exception(e)
 
 
-class JClass(object):
+class JClass(six.with_metaclass(Register)):
     """
     Wraps a Java class.
 
@@ -271,7 +310,9 @@ class JClass(object):
     Wrapper classes should call 'field', 'static_field', 'method', 'static_method',
     to describe the desired items that you want to access.
     """
-    def __init__(self, env, class_name):
+    class_name = None
+
+    def __init__(self, env):
         """
         Create base of Java class instance for the current thread's local environment.
 
@@ -279,10 +320,11 @@ class JClass(object):
         :param class_name: the Java class name, either java.lang.String or java/lang/String
         """
         self.env = env
-        self.class_name = class_name
-        self.cls = env.env.FindClass(self.class_name)
-        self.env.check_exception()
-        self.env.classes[class_name] = self
+        try:
+            self.cls = env.env.FindClass(self.class_name)
+            self.env.classes[self.class_name] = self
+        except jni.JavaException as e:
+            raise self.env.exception(e)
 
     def field(self, name, signature):
         """
@@ -296,22 +338,13 @@ class JClass(object):
 
     def static_field(self, name, signature):
         """
-        Assuming static fields are final, return the current value of the static field.
+        Link a JStaticField declaration to the current class
 
         :param name: the static field name
         :param signature: the static field signature
         :return: the static field's value
         """
-        fid = self.env.env.GetStaticFieldID(self.cls, name, signature)
-        if fid is None:
-            raise RuntimeError("Failed to find static field id for {}.{}/{}".format(
-                self.cls.class_name,
-                name,
-                signature
-            ))
-        restype = next(sig.type_signature(self.env.env, signature))
-        self.env.check_exception()
-        return restype.get_static(self.cls, fid)
+        return JStaticField(self, name, signature)
 
     def method(self, name, signature):
         """

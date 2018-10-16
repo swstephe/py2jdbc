@@ -4,6 +4,47 @@ from py2jdbc.dbi import (
     threadsafety,
     paramstyle,
 
+    ARRAY,
+    BIGINT,
+    BINARY,
+    BIT,
+    BLOB,
+    BOOLEAN,
+    CHAR,
+    CLOB,
+    DATALINK,
+    DATE,
+    DECIMAL,
+    DISTINCT,
+    DOUBLE,
+    FLOAT,
+    INTEGER,
+    JAVA_OBJECT,
+    LONGNVARCHAR,
+    LONGVARBINARY,
+    LONGVARCHAR,
+    NCHAR,
+    NCLOB,
+    NULL,
+    NUMERIC,
+    NVARCHAR,
+    OTHER,
+    REAL,
+    REF,
+    REF_CURSOR,
+    ROWID,
+    SMALLINT,
+    SQLXML,
+    STRUCT,
+    TEXT,
+    TIME,
+    TIME_WITH_TIMEZONE,
+    TIMESTAMP,
+    TIMESTAMP_WITH_TIMEZONE,
+    TINYINT,
+    VARBINARY,
+    VARCHAR,
+
     # noinspection PyShadowingBuiltins
     Warning,
     Error,
@@ -26,7 +67,9 @@ from py2jdbc.dbi import (
     DateFromTicks,
     TimeFromTicks,
     TimestampFromTicks,
-    Binary
+    Binary,
+
+
 )
 
 __all__ = (

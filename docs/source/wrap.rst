@@ -25,16 +25,16 @@ For example:
     # loads the local thread ThreadEnv instance
     env = wrap.get_env()
     # access java.lang.System wrapper
-    system = env.classes['java.lang.System']
+    system = env.get('java.lang.System')
 
     # call static method `getProperty` of java.lang.System
     # `sig` module will automatically convert strings.
     classpath = system.getProperty('java.class.path')
 
     # access/import class wrappers
-    enumeration = env.classes['java.lang.Enumeration]
-    driver = env.classes['java.sql.Driver']
-    driver_manager = env.classes['java.sql.DriverManager']
+    enumeration = env.get('java.lang.Enumeration')
+    driver = env.get('java.sql.Driver')
+    driver_manager = env.get('java.sql.DriverManager')
 
     # call static method `getDrivers` to fetch a list of drivers
     # wrap the result in an Enumeration wrapper, which acts like a Python iterator

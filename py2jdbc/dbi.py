@@ -1,9 +1,13 @@
 # -*- coding: utf8 -*-
 import six
+from collections import OrderedDict
 import datetime
 import time
 
-from py2jdbc.wrap import JavaException, get_env
+from py2jdbc.wrap import get_env
+from py2jdbc.lang import LangException
+from py2jdbc.math import BigDecimal
+from py2jdbc.sql import SQLException
 from py2jdbc.exc import (
     Warning,
     Error,
@@ -17,51 +21,283 @@ from py2jdbc.exc import (
     NotSupportedError,
 )
 
-_fetch_map = {
-    'ARRAY': None,
-    'BIGINT': 'getInt',
-    'BINARY': None,
-    'BIT': 'getInt',
-    'BLOB': None,
-    'BOOLEAN': 'getBoolean',
-    'CHAR': 'getString',
-    'CLOB': None,
-    'DATALINK': None,
-    'DATE': ('getDate', '%Y-%m-%d', 'date'),
-    'DECIMAL': 'geDouble',
-    'DISTINCT': None,
-    'DOUBLE': 'getDouble',
-    'FLOAT': 'getFloat',
-    'INTEGER': 'getInt',
-    'JAVA_OBJECT': None,
-    'LONGNVARCHAR': 'getString',
-    'LONGVARBINARY': None,
-    'LONGVARCHAR': 'getString',
-    'NCHAR': 'getString',
-    'NCLOB': None,
-    'NULL': None,
-    'NUMERIC': 'getDouble',
-    'NVARCHAR': 'getString',
-    'OTHER': 'getString',
-    'REAL': 'getDouble',
-    'REF': None,
-    'REF_CURSOR': None,
-    'ROWID': None,
-    'SMALLINT': 'getInt',
-    'SQLXML': None,
-    'STRUCT': None,
-    'TIME': ('getTime', '%H:M:%S', 'time'),
-    'TIME_WITH_TIMEZONE': None,
-    'TIMESTAMP': ('getTimestamp', '%Y-%m-%d %H:%M:%S.%f'),
-    'TIMESTAMP_WITH_TIMEZONE': None,
-    'TINYINT': 'getInt',
-    'VARBINARY': None,
-    'VRCHAR': 'getString',
-}
-
 apilevel = '2.0'
 threadsafety = 1
 paramstyle = 'qmark'
+
+
+class DataTypes(object):
+    def __init__(self):
+        self.registry = OrderedDict()
+
+    def __getitem__(self, key):
+        return self.registry.get(key)
+
+    def __iter__(self):
+        return iter(self.registry)
+
+    def register(self, cls):
+        print('registering', cls.__name__)
+        self.registry[cls.__name__] = cls
+        return cls
+
+
+datatypes = DataTypes()
+
+
+class DataType(object):
+    @property
+    def name(self):
+        return self.__class__.__name__
+
+    def get(self, rs, i):
+        raise NotImplementedError("DataType.get")
+
+
+@datatypes.register
+class ARRAY(DataType):
+    pass
+
+
+@datatypes.register
+class BIGINT(DataType):
+    def get(self, rs, i):
+        value = rs.getInt(i)
+        return None if rs.wasNull() else value
+
+
+
+@datatypes.register
+class BINARY(DataType):
+    pass
+
+
+@datatypes.register
+class BIT(DataType):
+    def get(self, rs, i):
+        value = rs.getInt(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class BLOB(DataType):
+    pass
+
+
+@datatypes.register
+class BOOLEAN(DataType):
+    def get(self, rs, i):
+        value = rs.getBoolean(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class CHAR(DataType):
+    def get(self, rs, i):
+        value = rs.getString(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class CLOB(DataType):
+    pass
+
+
+@datatypes.register
+class DATALINK(DataType):
+    pass
+
+
+@datatypes.register
+class DATE(DataType):
+    # 'DATE': ('getDate', '%Y-%m-%d', 'date'),
+    def get(self, rs, i):
+        value = rs.getDate(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class DECIMAL(DataType):
+    def get(self, rs, i):
+        value = rs.getDouble(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class DISTINCT(DataType):
+    pass
+
+
+@datatypes.register
+class DOUBLE(DataType):
+    def get(self, rs, i):
+        value = rs.getDouble(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class FLOAT(DataType):
+    def get(self, rs, i):
+        value = rs.getFloat(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class INTEGER(DataType):
+    def get(self, rs, i):
+        value = rs.getInt(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class JAVA_OBJECT(DataType):
+    pass
+
+
+@datatypes.register
+class LONGNVARCHAR(DataType):
+    def get(self, rs, i):
+        value = rs.getString(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class LONGVARBINARY(DataType):
+    pass
+
+
+@datatypes.register
+class LONGVARCHAR(DataType):
+    def get(self, rs, i):
+        value = rs.getString(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class NCHAR(DataType):
+    def get(self, rs, i):
+        value = rs.getString(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class NCLOB(DataType):
+    pass
+
+
+@datatypes.register
+class NULL(DataType):
+    pass
+
+
+@datatypes.register
+class NUMERIC(DataType):
+    def get(self, rs, i):
+        value = rs.getDouble()
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class NVARCHAR(DataType):
+    def get(self, rs, i):
+        value = rs.getString()
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class OTHER(DataType):
+    pass
+
+
+@datatypes.register
+class REAL(DataType):
+    def get(self, rs, i):
+        value = rs.getDouble(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class REF(DataType):
+    pass
+
+
+@datatypes.register
+class REF_CURSOR(DataType):
+    pass
+
+
+@datatypes.register
+class ROWID(DataType):
+    pass
+
+
+@datatypes.register
+class SMALLINT(DataType):
+    def get(self, rs, i):
+        value = rs.getInt(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class SQLXML(DataType):
+    pass
+
+
+@datatypes.register
+class STRUCT(DataType):
+    pass
+
+
+@datatypes.register
+class TEXT(DataType):
+    def get(self, rs, i):
+        value = rs.getString(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class TIME(DataType):
+    # 'TIME': ('getTime', '%H:M:%S', 'time'),
+    def get(self, rs, i):
+        value = rs.getTime(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class TIME_WITH_TIMEZONE(DataType):
+    pass
+
+
+@datatypes.register
+class TIMESTAMP(DataType):
+    # 'TIMESTAMP': ('getTimestamp', '%Y-%m-%d %H:%M:%S.%f'),
+    def get(self, rs, i):
+        value = rs.getTimestamp(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class TIMESTAMP_WITH_TIMEZONE(DataType):
+    pass
+
+
+@datatypes.register
+class TINYINT(DataType):
+    def get(self, rs, i):
+        value = rs.getInt(i)
+        return None if rs.wasNull() else value
+
+
+@datatypes.register
+class VARBINARY(DataType):
+    pass
+
+
+@datatypes.register
+class VARCHAR(DataType):
+    def get(self, rs, i):
+        value = rs.getString(i)
+        return None if rs.wasNull() else value
 
 
 class Cursor(object):
@@ -93,47 +329,27 @@ class Cursor(object):
     next = __next__
 
     def _fetch_funcs(self):
-        # noinspection PyShadowingNames
-        def check_null(fn):
-            # noinspection PyShadowingNames
-            def inner(i):
-                value = getattr(self._rs, fn)(i)
-                return None if self._rs.wasNull() else value
-            return inner
-
-        # noinspection PyShadowingNames
-        def date_format(fn, fmt, fn2=None):
-            def inner(n):
-                value = fn(self._rs, n)
-                if value is None:
-                    return None
-                value = datetime.datetime.strptime(value.toString(), fmt)
-                if fn2 is None:
-                    return value
-                return getattr(value, fn2)()
-            return inner
-
         meta = self._rs.getMetaData()
-        count = meta.getColumnCount()
+        try:
+            count = meta.getColumnCount()
+        except LangException.Instance as e:
+            return
         errors = []
         for i in range(count):
-            fn = _fetch_map.get(meta.getColumnTypeName(i + 1))
+            fn = datatypes[meta.getColumnTypeName(i + 1)]()
             if fn is None:
                 errors.append("unsupported datatype %r (%d) for column %r" % (
-                    meta.getColumntypename(i + 1),
+                    meta.getColumnTypeName(i + 1),
                     meta.getColumnType(i + 1),
                     meta.getColumnName(i + 1)
                 ))
-            elif isinstance(fn, str):
-                yield check_null(fn)
-            else:
-                yield date_format(check_null(fn[0]), *fn[i:])
+            yield fn
         if errors:
             raise DataError('\n'.join(errors))
 
     def _fetch_row(self, funcs):
         for i, fn in enumerate(funcs):
-            yield fn(self._rs, i + 1)
+            yield fn.get(self._rs, i + 1)
 
     @property
     def description(self):
@@ -157,12 +373,12 @@ class Cursor(object):
         return [
             [
                 meta.getColumnName(i + 1),
-                meta.getColumnType(i + 1),
+                datatypes[meta.getColumnTypeName(i + 1)],
                 meta.getColumnDisplaySize(i + 1),
                 None,
                 meta.getPrecision(i + 1),
                 meta.getScale(i + 1),
-                meta.isnullable(i + 1)
+                meta.isNullable(i + 1) == meta.cls.columnNullable
             ]
             for i in range(count)
         ]
@@ -201,8 +417,8 @@ class Cursor(object):
         if not isinstance(sql, six.string_types):
             raise ValueError("sql must be string")
         try:
-            stmt = _env.classes['java.sql.PreparedStatement'](self._conn.prepareStatement(sql))
-        except JavaException as e:
+            stmt = self._conn.prepareStatement(sql)
+        except SQLException.Instance as e:
             raise OperationalError(e.message)
         if args:
             if hasattr(args, '__getitem__'):
@@ -210,15 +426,19 @@ class Cursor(object):
             try:
                 for i, arg in enumerate(args):
                     stmt.set(i + 1, arg)
-            except JavaException as e:
-                raise ProgrammingError(e.message)
+            except SQLException.Instance as e2:
+                raise ProgrammingError(e2.message)
+            except LangException.Instance as e1:
+                raise ProgrammingError(e1.message)
         try:
             check = stmt.execute()
-        except JavaException as e:
-            raise OperationalError(e.message)
+        except LangException.Instance as e:
+            if isinstance(e, SQLException.Instance):
+                raise OperationalError(e.message)
+            raise ProgrammingError(e.message)
 
         if check:
-            self._rs = _env.classes['java.sql.ResultSet'](stmt.getResultSet())
+            self._rs = stmt.getResultSet()
         else:
             count = stmt.getUpdateCount()
             if count == -1:
@@ -241,8 +461,8 @@ class Cursor(object):
             raise ValueError("wrong datatype for sql")
         self.rowcount = None
         try:
-            stmt = _env.classes['java.sql.PreparedStatement'](self._conn.prepareStatement(sql))
-        except JavaException as e:
+            stmt = self._conn.prepareStatement(sql)
+        except SQLException.Instance as e:
             raise DatabaseError(e.message)
 
         for row in rows:
@@ -403,11 +623,11 @@ class Connection(object):
         :return: the Connection object
         """
         env = get_env(**kwargs)
-        dm = env.classes['java.sql.DriverManager']
+        dm = env.get('java.sql.DriverManager')
         self.close()
         try:
             self.conn = dm.getConnection(*args)
-        except JavaException as e:
+        except SQLException.Instance as e:
             raise OperationalError(e.message)
         self._autocommit = self.conn.getAutoCommit()
         return self
@@ -446,17 +666,17 @@ def connect(*args, **kwargs):
 
 def Date(year, month, day):
     env = get_env()
-    return env.classes['java.sql.Date'](year, month, day)
+    return env.get('java.sql.Date').new(year, month, day)
 
 
 def Time(hour, minute, second):
     env = get_env()
-    return env.classes['java.sql.Time'](hour, minute, second)
+    return env.get('java.sql.Time').new(hour, minute, second)
 
 
 def Timestamp(year, month, day, hour, minute, second):
     env = get_env()
-    return env.classes['java.sql.Timestamp'](year, month, day, hour, minute, second)
+    return env.get('java.sql.Timestamp').new(year, month, day, hour, minute, second)
 
 
 def DateFromTicks(ticks):

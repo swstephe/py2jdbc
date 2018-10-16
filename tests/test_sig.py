@@ -330,19 +330,14 @@ def test_double_array():
 
 def test_system():
     cls = _env.FindClass('java.lang.System')
-    jni.check_exception(_env)
-    assert cls is not None
     signature = '(Ljava/lang/String;)Ljava/lang/String;'
     mid = _env.GetStaticMethodID(cls, 'getProperty', signature)
-    jni.check_exception(_env)
-    assert mid is not None
     argtypes, restype = sig.method_signature(_env, signature)
     result = restype.call_static(cls, mid, argtypes, 'java.class.path')
     assert result == CLASSPATH
     signature = 'Ljava/io/PrintStream;'
     fid = _env.GetStaticFieldID(cls, 'out', signature)
     t = next(sig.type_signature(_env, signature))
-    jni.check_exception(_env)
     result2 = t.get_static(cls, fid)
     assert result2 is not None
     _env.DeleteLocalRef(result2)
@@ -351,20 +346,14 @@ def test_system():
 
 def test_class():
     cls = _env.FindClass('java.lang.Class')
-    jni.check_exception(_env)
-    assert cls is not None
     signature = '(Ljava/lang/String;)Ljava/lang/Class;'
     mid1 = _env.GetStaticMethodID(cls, 'forName', signature)
-    jni.check_exception(_env)
-    assert mid1 is not None
     argtypes, restype = sig.method_signature(_env, signature)
     result = restype.call_static(cls, mid1, argtypes, 'java.lang.System')
     assert result is not None
     _env.DeleteLocalRef(result)
     signature = '()Ljava/lang/String;'
     mid2 = _env.GetMethodID(cls, 'getName', signature)
-    jni.check_exception(_env)
-    assert mid2 is not None
     argtypes, restype = sig.method_signature(_env, signature)
     result = restype.call(cls, mid2, argtypes)
     assert result == 'java.lang.Class'
@@ -373,12 +362,8 @@ def test_class():
 
 def test_drivermanager():
     cls = _env.FindClass('java.sql.DriverManager')
-    jni.check_exception(_env)
-    assert cls is not None
     signature = '(Ljava/lang/String;)Ljava/sql/Connection;'
     mid1 = _env.GetStaticMethodID(cls, 'getConnection', signature)
-    jni.check_exception(_env)
-    assert mid1 is not None
     argtypes, restype = sig.method_signature(_env, signature)
     conn = restype.call_static(cls, mid1, argtypes, 'jdbc:sqlite::memory:')
     assert conn is not None
@@ -388,14 +373,9 @@ def test_drivermanager():
 
 def _new(class_name, signature, *values):
     cls = _env.FindClass(class_name)
-    jni.check_exception(_env)
-    assert cls is not None
     argtypes, restype = sig.constructor_signature(_env, class_name, signature)
     mid = _env.GetMethodID(cls, '<init>', '({})V'.format(signature))
-    jni.check_exception(_env)
     obj = restype.new(cls, mid, argtypes, *values)
-    jni.check_exception(_env)
-    assert obj is not None
     _env.DeleteLocalRef(obj)
     _env.DeleteLocalRef(cls)
 

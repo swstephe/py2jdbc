@@ -68,7 +68,7 @@ class JSigVoid(JSig):
 
         :param obj: a Java object instance
         :param mid: the methodID of the method to call
-        :param argtypes: a list of argument signature types
+        :param argtypes: a sequence of argument signature types
         :param args: the Python arguments to bind
         """
         _args = method_args(argtypes, *args)
@@ -151,8 +151,7 @@ class JSigScalar(JSig):
         :param fid: the fieldID of the field
         :return: the value of the field, converted to Python
         """
-        value = self._fn_get(self.env, fid, obj)
-        jni.check_exception(self.env)
+        value = self._fn_get(obj, fid)
         return self.j2py(value)
 
     def set(self, obj, fid, value):
@@ -163,8 +162,7 @@ class JSigScalar(JSig):
         :param fid: the fieldID of the field
         :param value: the Python value to assign to the field
         """
-        self._fn_set(self.env, fid, obj, self.py2j(value))
-        jni.check_exception(self.env)
+        self._fn_set(obj, fid, self.py2j(value))
 
     def get_static(self, cls, fid):
         """
@@ -175,7 +173,6 @@ class JSigScalar(JSig):
         :return: the value of the static field, converted to Python
         """
         value = self._fn_get_static(cls, fid)
-        jni.check_exception(self.env)
         return self.j2py(value)
 
     def set_static(self, cls, fid, value):
@@ -187,21 +184,19 @@ class JSigScalar(JSig):
         :param value: the Python value to assign to the field
         """
         self._fn_set_static(cls, fid, self.py2j(value))
-        jni.check_exception(self.env)
 
     def call(self, obj, mid, argtypes, *args):
         """
         Call a non-static method
 
         :param obj: a Java object instance
-        :param mid: the methodID of the method
+        :param mid: the methodID of the method to call
         :param argtypes: a sequence of argument signature types
-        :param args: the Python arguments to the method
+        :param args: the Python arguments to bind
         :return: the primitive value result of the method
         """
         _args = method_args(argtypes, *args)
         value = self._fn_call(obj, mid, _args)
-        jni.check_exception(self.env)
         for _a, _at in zip(_args, argtypes):
             _at.release(_a.l)
         result = self.j2py(value)
@@ -220,7 +215,6 @@ class JSigScalar(JSig):
         """
         _args = method_args(argtypes, *args)
         value = self._fn_call_static(cls, mid, _args)
-        jni.check_exception(self.env)
         for _a, _at in zip(_args, argtypes):
             _at.release(_a.l)
         result = self.j2py(value)
@@ -434,7 +428,6 @@ class JSigObject(JSigScalar):
         """
         _args = method_args(argtypes, *args)
         obj = self.env.NewObjectA(cls, mid, _args)
-        jni.check_exception(self.env)
         for _a, _at in zip(_args, argtypes):
             _at.release(_a.l)
         return obj
@@ -475,6 +468,15 @@ class JSigArray(JSig):
         :return: the jni module array type.
         """
         return getattr(jni, 'j' + self.name[0].lower() + self.name[1:-5])
+
+    def jval(self, jval, value):
+        """
+        Assign a jvalue union to a value using the matching tag.
+
+        :param jval: a jvalue union
+        :param value: a Python value
+        """
+        jval.l = self.py2j(value)
 
     def elem_j2py(self, value):
         """
@@ -534,7 +536,6 @@ class JSigArray(JSig):
         """
         _args = method_args(argtypes, *args)
         value = self._fn_call(obj, mid, _args)
-        jni.check_exception(self.env)
         for _a, _at in zip(_args, argtypes):
             _at.release(_a.l)
         result = self.j2py(value)
@@ -554,7 +555,6 @@ class JSigArray(JSig):
         """
         _args = method_args(argtypes, *args)
         value = self._fn_call_static(cls, mid, _args)
-        jni.check_exception(self.env)
         for _a, _at in zip(_args, argtypes):
             _at.release(_a.l)
         result = self.j2py(value)
@@ -717,9 +717,6 @@ class JSigObjectArray(JSig):
         super(JSigObjectArray, self).__init__(env)
         self.class_name = class_name
         self.cls = self.env.FindClass(self.class_name)
-        jni.check_exception(env)
-        if self.cls is None:
-            raise RuntimeError("failed to find element class {}".format(class_name))
         self._fn_get_element = env.GetObjectArrayElement
         self._fn_new = env.NewObjectArray
         self._fn_set_element = env.SetObjectArrayElement
@@ -727,6 +724,15 @@ class JSigObjectArray(JSig):
     @property
     def jtype(self):
         return jni.jobjectArray
+
+    def jval(self, jval, value):
+        """
+        Assign a jvalue union to a value using the matching tag.
+
+        :param jval: a jvalue union
+        :param value: a Python value
+        """
+        jval.l = self.py2j(value)
 
     def elem_j2py(self, value):
         """
@@ -790,7 +796,6 @@ class JSigObjectArray(JSig):
         """
         _args = method_args(argtypes, *args)
         value = self.env.CallObjectMethodA(obj, mid, _args)
-        jni.check_exception(self.env)
         for _a, _at in zip(_args, argtypes):
             _at.release(_a.l)
         result = self.j2py(value)
@@ -809,7 +814,6 @@ class JSigObjectArray(JSig):
         """
         _args = method_args(argtypes, *args)
         value = self.env.CallStaticObjectMethodA(cls, mid, _args)
-        jni.check_exception(self.env)
         for _a, _at in zip(_args, argtypes):
             _at.release(_a.l)
         result = self.j2py(value)

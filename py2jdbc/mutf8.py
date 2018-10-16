@@ -306,3 +306,29 @@ def info(name):
     """
     if name in ('mutf8', 'mutf-8'):
         return codecs.CodecInfo(encode, decode, name=NAME)
+
+
+def mutf8_encode(text, **kwargs):
+    """
+    Utility to encode strings into Java Modified UTF8 format
+
+    :param text: Python unicode/str text
+    :param kwargs: `errors` type, default is `strict`
+    :return: the string encoded in Java's Modified UTF-8
+    """
+    return codecs.encode(text, NAME, kwargs.get('errors', 'strict'))
+
+
+def mutf8_decode(data, **kwargs):
+    """
+    Utility to decode Java Modified UTF8 to Python unicode/str text.
+
+    :param data: some Java Modified UTF8 bytes
+    :param kwargs: `errors` keyword, default is `strict`
+    :return: the Python unicode/str text
+    """
+    return codecs.decode(data, NAME, kwargs.get('errors', 'strict'))
+
+
+# register this codec when module is loaded
+codecs.register(info)
