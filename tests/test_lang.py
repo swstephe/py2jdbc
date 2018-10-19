@@ -6,8 +6,7 @@ from py2jdbc.jni import jdouble, jobject
 from py2jdbc.wrap import get_env
 from py2jdbc.lang import (
     Object,
-    LangException,
-    Throwable
+    LangException
 )
 from tests.config import (
     CLASSPATH, JAVA_OPTS,

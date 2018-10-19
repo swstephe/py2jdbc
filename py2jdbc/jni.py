@@ -2,6 +2,7 @@
 import atexit
 import codecs
 import logging
+import signal
 import six
 
 from ctypes import (
@@ -12,11 +13,10 @@ from ctypes import (
     CDLL, CFUNCTYPE, POINTER,
     byref
 )
-from py2jdbc import jvm
-from py2jdbc import mutf8
+from py2jdbc.jvm import CP_SEP, find_libjvm, get_classpath
+import py2jdbc.mutf8
 
 log = logging.getLogger(__name__)
-codecs.register(mutf8.info)
 
 
 JNI_FALSE = 0
@@ -105,7 +105,7 @@ class jvalue(Union):
     """
     JNI jvalue union type
     """
-    _fields_ = tuple((a, globals()['j'+b]) for a, b in type_codes)
+    _fields_ = tuple((a, globals()['j' + b]) for a, b in type_codes)
 
 
 jvalue_p = POINTER(jvalue)
@@ -200,7 +200,6 @@ class JavaException(Exception):
     Wait until "wrap" layer to unroll the exception details into a Python exception.
     """
     def __init__(self, env, throwable):
-        print('JavaException(%r, %r)' % (env, throwable))
         self.env = env
         self.throwable = throwable
 
@@ -210,7 +209,6 @@ class NullResultException(Exception):
     A JNI function returned NNULL
     """
     def __init__(self, env, *args):
-        print('NullResultException(%r, %r)' % (env, args))
         self.env = env
         super(NullResultException, self).__init__(*args)
 
@@ -498,13 +496,9 @@ class JNIEnv(Structure):
         """
         throwable = self.ExceptionOccurred()
         if throwable:
-            print('check_exception')
-            # if log.getEffectiveLevel() == logging.DEBUG:
-            print('ExceptionDescribe()')
-            self.ExceptionDescribe()
-            print('ExceptionClear()')
+            if log.getEffectiveLevel() == logging.DEBUG:
+                self.ExceptionDescribe()
             self.ExceptionClear()
-            print('raise JavaException()')
             raise JavaException(self, throwable)
 
     def FatalError(self, msg):
@@ -2621,7 +2615,7 @@ class JavaVMAttachArgs(Structure):
     )
 
 
-libjvm = CDLL(jvm.find_libjvm())
+libjvm = CDLL(find_libjvm())
 
 libjvm.JNI_GetDefaultJavaVMInitArgs.retval = jint
 libjvm.JNI_GetDefaultJavaVMInitArgs.argstype = [POINTER(JavaVMInitArgs)]
@@ -2641,7 +2635,7 @@ JNI_VERSION_9 = 0x00090000
 JNI_VERSION_10 = 0x000a0000
 
 vm = JavaVM_p()
-ENCODING = mutf8.NAME
+ENCODING = py2jdbc.mutf8.NAME
 
 
 def encode(s):
@@ -2681,7 +2675,7 @@ def get_env(**kwargs):
     """
     global vm
 
-    kwargs.setdefault('classpath', jvm.get_classpath('./lib'))
+    kwargs.setdefault('classpath', get_classpath('./lib'))
     kwargs.setdefault('version', JNI_VERSION_1_2)
     _env = JNIEnv_p()
     if vm:
@@ -2700,7 +2694,7 @@ def get_env(**kwargs):
                 if isinstance(v, six.string_types):
                     opts.append('-Djava.class.path={}'.format(v))
                 else:
-                    opts.append('-Djava.class.path={}'.format(jvm.CP_SEP.join(v)))
+                    opts.append('-Djava.class.path={}'.format(CP_SEP.join(v)))
             elif k == 'verbose':
                 if isinstance(v, six.string_types):
                     opts.append('-verbose:{}'.format(v))
@@ -2762,11 +2756,10 @@ def get_class_name(env, obj):
 
 atexit.register(destroy_vm)
 
-import signal
-import sys
 
+# noinspection PyUnusedLocal
 def signal_handler(sig, frame):
-    print("Handle this!")
-    sys.exit(0)
+    raise RuntimeError("encountered signal")
+
 
 signal.signal(signal.SIGHUP, signal_handler)

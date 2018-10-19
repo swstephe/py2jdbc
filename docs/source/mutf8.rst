@@ -48,23 +48,21 @@ Usage
 
 To use this encoding, you could do this::
 
-    import six
     import codecs
-    from py2jdbc import mutf8
-    codecs.register(mutf8.info)
+    import py2jdbc.mutf8
+    codecs.register(py2jdbc.mutf8.info)
 
-    codecs.encode(six.u('a string'), 'mutf8')
-    codecs.encode(six.u('a string'), 'mutf-8')
-    codecs.encode(six.u('a string'), mutf8.NAME)
+    codecs.encode(u'a string', 'mutf8')
+    codecs.encode(u'a string', 'mutf-8')
+    codecs.encode(u'a string', py2jdbc.mutf8.NAME)
 
 The :doc:`jni` module registers and imports this module and maps it to :py:func:`jni.encode`
 and :func:`jni.decode` already, so you could also use it with::
 
-    import six
-    from py2jdbc import jni
+    from py2jdbc.jni import encode
 
-    jni.encode(six.u('a string'))
-    jni.decode(six.b('a string'))
+    encode(u'a string')
+    decode(b'a string')
 
 Although JNI will do this automatically for any calls needing a character pointer argument
 or returning a character poiter result.

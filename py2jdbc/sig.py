@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 import six
-from py2jdbc import jni
+import py2jdbc.jni
 
 
 class JSigType(type):
@@ -132,7 +132,7 @@ class JSigScalar(JSig):
 
         :return: a JNI primitive type
         """
-        return getattr(jni, 'j' + self.name[0].lower() + self.name[1:])
+        return getattr(py2jdbc.jni, 'j' + self.name[0].lower() + self.name[1:])
 
     def jval(self, jval, value):
         """
@@ -237,8 +237,8 @@ class JSigBoolean(JSigScalar):
         :param value: the Java jboolean
         :return: the Python boolean value
         """
-        assert value in (jni.JNI_FALSE, jni.JNI_TRUE)
-        return value == jni.JNI_TRUE
+        assert value in (py2jdbc.jni.JNI_FALSE, py2jdbc.jni.JNI_TRUE)
+        return value == py2jdbc.jni.JNI_TRUE
 
     def py2j(self, value):
         """
@@ -247,7 +247,7 @@ class JSigBoolean(JSigScalar):
         :param value: the Python boolean value
         :return: a Java jboolean
         """
-        return jni.JNI_TRUE if value else jni.JNI_FALSE
+        return py2jdbc.jni.JNI_TRUE if value else py2jdbc.jni.JNI_FALSE
 
 
 class JSigByte(JSigScalar):
@@ -397,7 +397,7 @@ class JSigObject(JSigScalar):
         if self.classname == 'java/lang/String':
             chars = self.env.GetStringUTFChars(value)
             self.env.DeleteLocalRef(value)
-            return jni.decode(chars)
+            return py2jdbc.jni.decode(chars)
         return super(JSigObject, self).j2py(value)
 
     def py2j(self, value):
@@ -446,7 +446,7 @@ class JSigArray(JSig):
     """
     The base class for arrays of primitive types or objects.
 
-    Instances can map a jbyteArray to a Python list of ints,
+    Instances can map a jarray to a Python list of ints,
     or convert back from a Python sequence of ints back into a jbyteArray,
     for example.
     """
@@ -464,10 +464,10 @@ class JSigArray(JSig):
         """
         Maps in function calls by looking at the class name.
 
-        JSigBooleanArray => jni.jbooleanArray
+        JSigBooleanArray => jbooleanArray
         :return: the jni module array type.
         """
-        return getattr(jni, 'j' + self.name[0].lower() + self.name[1:-5])
+        return getattr(py2jdbc.jni, 'j' + self.name[0].lower() + self.name[1:-5])
 
     def jval(self, jval, value):
         """
@@ -476,7 +476,7 @@ class JSigArray(JSig):
         :param jval: a jvalue union
         :param value: a Python value
         """
-        jval.l = self.py2j(value)
+        setattr(jval, 'l', self.py2j(value))
 
     def elem_j2py(self, value):
         """
@@ -497,7 +497,7 @@ class JSigArray(JSig):
         _len = self.env.GetArrayLength(value)
         _values = self._fn_get_elements(value, None)
         result = [self.elem_j2py(_values[i]) for i in range(_len)]
-        self._fn_release_elements(value, _values, jni.JNI_ABORT)
+        self._fn_release_elements(value, _values, py2jdbc.jni.JNI_ABORT)
         return result
 
     def elem_py2j(self, value):
@@ -582,7 +582,7 @@ class JSigBooleanArray(JSigArray):
         :param value: a jboolean element
         :return: a Python boolean
         """
-        return value == jni.JNI_TRUE
+        return value == py2jdbc.jni.JNI_TRUE
 
     def elem_py2j(self, value):
         """
@@ -591,7 +591,7 @@ class JSigBooleanArray(JSigArray):
         :param value: a Python boolean
         :return: a jboolean value
         """
-        return jni.JNI_TRUE if value else jni.JNI_FALSE
+        return py2jdbc.jni.JNI_TRUE if value else py2jdbc.jni.JNI_FALSE
 
 
 class JSigByteArray(JSigArray):
@@ -599,6 +599,33 @@ class JSigByteArray(JSigArray):
     A Signature Type for byte arrays.
     """
     code = '[B'
+
+    def j2py(self, value):
+        """
+        Convert a Java byte array into a Python binary sequence.
+        That would be `bytes` in Python 3 or `str` in Python 2.
+
+        :param value: a Java byteArray object
+        :return: a Python single-byte string
+        """
+        _len = self.env.GetArrayLength(value)
+        _values = self._fn_get_elements(value, None)
+        result = b''.join(six.int2byte(_values[i] & 0xff) for i in range(_len))
+        self._fn_release_elements(value, _values, py2jdbc.jni.JNI_ABORT)
+        return result
+
+    def py2j(self, value):
+        """
+        Convert a Python binary string to a Java byteArray
+
+        :param value: a Python byte string
+        :return: a Java byteArray
+        """
+        _len = len(value)
+        result = self._fn_new(_len)
+        _values = self.jtype.__mul__(_len)(*value)
+        self._fn_set_region(result, 0, _len, _values)
+        return result
 
 
 class JSigCharArray(JSigArray):
@@ -723,7 +750,7 @@ class JSigObjectArray(JSig):
 
     @property
     def jtype(self):
-        return jni.jobjectArray
+        return py2jdbc.jni.jobjectArray
 
     def jval(self, jval, value):
         """
@@ -732,7 +759,7 @@ class JSigObjectArray(JSig):
         :param jval: a jvalue union
         :param value: a Python value
         """
-        jval.l = self.py2j(value)
+        setattr(jval, 'l', self.py2j(value))
 
     def elem_j2py(self, value):
         """
@@ -744,7 +771,7 @@ class JSigObjectArray(JSig):
         """
         if self.class_name == 'java/lang/String':
             value = self.env.GetStringUTFChars(value)
-            return jni.decode(value)
+            return py2jdbc.jni.decode(value)
         return value
 
     def j2py(self, value):
@@ -920,7 +947,7 @@ def method_args(argtypes, *args):
     :param args: subsequent Python values
     :return: the converted
     """
-    _args = jni.jvalue.__mul__(len(argtypes))()
+    _args = py2jdbc.jni.jvalue.__mul__(len(argtypes))()
     for i in range(len(argtypes)):
         argtypes[i].jval(_args[i], args[i])
     return _args

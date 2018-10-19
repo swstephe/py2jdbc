@@ -62,6 +62,7 @@ SRC = os.path.join(CWD, 'src')
 CLASSPATH = CP_SEP.join([
     os.path.join(SRC),
     os.path.join(LIB, 'sqlite-jdbc-3.23.1.jar'),
+    os.path.join(LIB, 'mysql-connector-java-8.0.12.jar'),
 ])
 DRIVER = 'org.sqlite.JDBC'
 JAVA_OPTS = dict(classpath=CLASSPATH, verbose=('memory', 'gc'), check='jni')

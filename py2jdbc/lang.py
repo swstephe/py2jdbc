@@ -8,7 +8,6 @@ from py2jdbc.wrap import JClass
 log = logging.getLogger(__name__)
 
 
-
 class MsgException(Exception):
     def __init__(self, message):
         super(MsgException, self).__init__()

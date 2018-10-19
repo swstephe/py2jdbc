@@ -22,13 +22,13 @@ For example:
 
 .. code-block::python
 
-    from py2jdbc import jni
-    from py2jdbc import sig
+    from py2jdbc.jni import get_env, jvalue
+    from py2jdbc.sig import type_signature
 
-    _env = jni.get_env()
+    _env = get_env()
 
     # get the first signature object returned
-    c = next(sig.type_signature(_env, 'C')
+    c = next(type_signature(_env, 'C')
 
     # convert jchar (short) to Python unicode character:
     c.j2py(12) == u'\u0012'
@@ -37,7 +37,7 @@ For example:
     c.py2j('.') == ord('.')
 
     # assign jchar to jvalue union
-    val = jni.jvalue()
+    val = jvalue()
     c.jval(val, 'X')
     assert val.c == ord('X')
 
@@ -46,10 +46,10 @@ For method signatures:
 
 .. code-block::python
 
-    from py2jdbc import jni
-    from py2jdbc import sig
+    from py2jdbc.jni import get_env
+    from py2jdbc.sig import method_signature
 
-    _env = jni.get_env()
+    _env = get_env()
 
     # JNI function to load class
     cls = _env.FindClass('java.lang.System')
@@ -60,7 +60,7 @@ For method signatures:
     mid = _env.GetStaticMethodID(cls, 'getProperty', signature)
 
     # map signture to a list of argument type mappers and the result type mapper
-    argtypes, restype = sig.method_signature(_env, signature)
+    argtypes, restype = method_signature(_env, signature)
 
     # call the function through the result's 'call_static' method
     result = restype.call_static(cls, mid, argtypes, 'java.class.path')

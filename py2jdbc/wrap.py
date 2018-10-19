@@ -1,8 +1,8 @@
 # -*- coding: utf8 -*-
 import logging
 import six
-from py2jdbc import jni
-from py2jdbc import sig
+import py2jdbc.jni
+import py2jdbc.sig
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class ThreadEnv(object):
 
         :param kwargs: jni.JNIEnv.get_env arguments, (like classpath, verbose, etc.)
         """
-        self.env = jni.get_env(**kwargs)
+        self.env = py2jdbc.jni.get_env(**kwargs)
         self.classes = {}
         self.exceptions = (
             'java.sql.SQLException',
@@ -49,9 +49,9 @@ class ThreadEnv(object):
         object for the thread, or create one if the current thread doesn't have one.
 
         The instance will have all the JClass subclass wrappers already loaded
-        against the current jni.JNIEnv.
+        against the current py2jdbc.jni.JNIEnv.
 
-        :param kwargs: jni.JNIEnv.get_env arguments, (like classpath, verbose, etc.)
+        :param kwargs: py2jdbc.jni.JNIEnv.get_env arguments, (like classpath, verbose, etc.)
         :return: the current thread's ThreadEnv object
         """
         return cls(**kwargs)
@@ -78,7 +78,7 @@ def get_env(**kwargs):
     Alias for singleton creator function, which attaches/creates a ThreadEnv
     for the current thread.
 
-    :param kwargs: jni.JNIEnv.get_env arguments, (classpath, verbose, etc.)
+    :param kwargs: py2jdbc.jni.JNIEnv.get_env arguments, (classpath, verbose, etc.)
     :return: the current thread's ThreadEnv instance.
     """
     return ThreadEnv.instance(**kwargs)
@@ -104,8 +104,8 @@ class JBase(object):
     @property
     def env(self):
         """
-        A convenience link back to the jni.JNIEnv instance.
-        :return: the current thread's jni.JNIEnv instance
+        A convenience link back to the py2jdbc.jni.JNIEnv instance.
+        :return: the current thread's py2jdbc.jni.JNIEnv instance
         """
         return self.cls.env.env
 
@@ -129,8 +129,8 @@ class JField(JBase):
         super(JField, self).__init__(cls, name, signature)
         try:
             self.fid = self.env.GetFieldID(cls.cls, name, signature)
-            self.restype = next(sig.type_signature(self.env, signature))
-        except jni.JavaException as e:
+            self.restype = next(py2jdbc.sig.type_signature(self.env, signature))
+        except py2jdbc.jni.JavaException as e:
             raise self.cls.env.exception(e)
 
     def get(self, obj):
@@ -172,7 +172,7 @@ class JMethod(JBase):
         try:
             self.mid = self.env.GetMethodID(cls.cls, name, signature)
             self.argtypes, self.restype = self.get_signature(signature)
-        except jni.JavaException as e:
+        except py2jdbc.jni.JavaException as e:
             raise self.cls.env.exception(e)
 
     def get_signature(self, signature):
@@ -183,7 +183,7 @@ class JMethod(JBase):
         :param signature: method signature
         :return: argtypes and restype from signature
         """
-        return sig.method_signature(self.env, signature)
+        return py2jdbc.sig.method_signature(self.env, signature)
 
     def __call__(self, obj, *args):
         """
@@ -195,7 +195,7 @@ class JMethod(JBase):
         """
         try:
             return self.restype.call(obj, self.mid, self.argtypes, *args)
-        except jni.JavaException as e:
+        except py2jdbc.jni.JavaException as e:
             raise self.cls.env.exception(e)
 
 
@@ -222,7 +222,7 @@ class JConstructor(JMethod):
         :param signature: the full singature
         :return: argtypes and restype
         """
-        return sig.constructor_signature(
+        return py2jdbc.sig.constructor_signature(
             self.env,
             self.cls.class_name,
             signature[1:-2]
@@ -238,7 +238,7 @@ class JConstructor(JMethod):
         try:
             obj = self.restype.new(self.cls.cls, self.mid, self.argtypes, *args)
             return self.cls(obj)
-        except jni.JavaException as e:
+        except py2jdbc.jni.JavaException as e:
             raise self.cls.env.exception(e)
 
 
@@ -250,20 +250,20 @@ class JStaticField(JBase):
         super(JStaticField, self).__init__(cls, name, signature)
         try:
             self.fid = self.env.GetStaticFieldID(cls.cls, name, signature)
-            self.restype = next(sig.type_signature(self.env, signature))
-        except jni.JavaException as e:
+            self.restype = next(py2jdbc.sig.type_signature(self.env, signature))
+        except py2jdbc.jni.JavaException as e:
             raise self.cls.env.exception(e)
 
     def get(self, cls):
         try:
             return self.restype.get_static(cls, self.fid)
-        except jni.JavaException as e:
+        except py2jdbc.jni.JavaException as e:
             raise self.cls.env.exception(e)
 
     def set(self, cls, value):
         try:
             self.restype.set_static(cls, self.fid, value)
-        except jni.JavaException as e:
+        except py2jdbc.jni.JavaException as e:
             raise self.cls.env.exception(e)
 
 
@@ -285,7 +285,7 @@ class JStaticMethod(JBase):
         """
         super(JStaticMethod, self).__init__(cls, name, signature)
         self.mid = self.env.GetStaticMethodID(self.cls.cls, name, signature)
-        self.argtypes, self.restype = sig.method_signature(self.env, signature)
+        self.argtypes, self.restype = py2jdbc.sig.method_signature(self.env, signature)
 
     def __call__(self, *args):
         """
@@ -298,7 +298,7 @@ class JStaticMethod(JBase):
             value = self.restype.call_static(self.cls.cls, self.mid, self.argtypes, *args)
             self.restype.release(value)
             return value
-        except jni.JavaException as e:
+        except py2jdbc.jni.JavaException as e:
             raise self.cls.env.exception(e)
 
 
@@ -317,13 +317,12 @@ class JClass(six.with_metaclass(Register)):
         Create base of Java class instance for the current thread's local environment.
 
         :param env: the current thread's local environment
-        :param class_name: the Java class name, either java.lang.String or java/lang/String
         """
         self.env = env
         try:
             self.cls = env.env.FindClass(self.class_name)
             self.env.classes[self.class_name] = self
-        except jni.JavaException as e:
+        except py2jdbc.jni.JavaException as e:
             raise self.env.exception(e)
 
     def field(self, name, signature):

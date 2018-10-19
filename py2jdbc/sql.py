@@ -2,7 +2,6 @@
 import datetime
 import logging
 import six
-import time
 
 from py2jdbc.lang import LangException, Object, ArgumentError
 from py2jdbc.util import Date
@@ -230,7 +229,6 @@ class PreparedStatement(Object):
             self.getUpdateCount = lambda o=obj: cls.getUpdateCount(o)
             self.setBoolean = lambda i, v, o=obj: cls.setBoolean(o, i, v)
             self.setByte = lambda i, v, o=obj: cls.setByte(o, i, v)
-            self.setDate = lambda i, v, o=obj: cls.setDate(o, i, v)
             self.setDouble = lambda i, v, o=obj: cls.setDouble(o, i, v)
             self.setFloat = lambda i, v, o=obj: cls.setFloat(o, i, v)
             self.setShort = lambda i, v, o=obj: cls.setShort(o, i, v)
@@ -238,13 +236,14 @@ class PreparedStatement(Object):
             self.setLong = lambda i, v, o=obj: cls.setLong(o, i, v)
             self.setNull = lambda i, v, o=obj: cls.setNull(o, i, v)
             self.setString = lambda i, v, o=obj: cls.setString(o, i, v)
-            self.setTimestamp = lambda i, v, o=obj: cls.setTimestamp(o, i, v)
             if cls.Date is None:
                 cls.Date = self.env.get('java.sql.Date')
             if cls.ParameterMetaData is None:
                 cls.ParameterMetaData = self.env.get('java.sql.ParameterMetaData')
             if cls.ResultSet is None:
                 cls.ResultSet = self.env.get('java.sql.ResultSet')
+            if cls.Time is None:
+                cls.Time = self.env.get('java.sql.Time')
             if cls.Timestamp is None:
                 cls.Timestamp = self.env.get('java.sql.Timestamp')
             if cls.TypesNull is None:
@@ -267,12 +266,34 @@ class PreparedStatement(Object):
                 self.setDouble(i, arg)
             elif isinstance(arg, six.string_types):
                 self.setString(i, arg)
+            elif isinstance(arg, six.binary_type):
+                self.setBytes(i, arg)
             elif isinstance(arg, datetime.datetime):
-                self.setTimestamp(i, self.cls.Timestamp(time.mktime(arg.timetuple()) * 1000))
+                self.setTimestamp(i, arg)
             elif isinstance(arg, datetime.date):
-                self.setDate(i, self.cls.Date(time.mktime(arg.timetuple()) * 1000))
+                self.setDate(i, arg)
+            elif isinstance(arg, datetime.time):
+                self.setTime(i, arg)
             else:
                 raise RuntimeError("can't bind to python value %r(%r)", arg, type(arg))
+
+        def setBytes(self, i, value):
+            self.cls.setBytes(self.obj, i, value)
+
+        def setDate(self, i, value):
+            if not isinstance(value, self.cls.Date.Instance):
+                value = self.cls.Date.from_python(value)
+            self.cls.setDate(self.obj, i, value.obj)
+
+        def setTime(self, i, value):
+            if not isinstance(value, self.cls.Time.Instance):
+                value = self.cls.Time.from_python(value)
+            self.cls.setTime(self.obj, i, value.obj)
+
+        def setTimestamp(self, i, value):
+            if not isinstance(value, self.cls.Timestamp.Instance):
+                value = self.cls.Timestamp.from_python(value)
+            self.cls.setTimestamp(self.obj, i, value.obj)
 
     def __init__(self, env):
         super(PreparedStatement, self).__init__(env)
@@ -289,6 +310,7 @@ class PreparedStatement(Object):
         self.getUpdateCount = self.method('getUpdateCount', '()I')
         self.setBoolean = self.method('setBoolean', '(IZ)V')
         self.setByte = self.method('setByte', '(IB)V')
+        self.setBytes = self.method('setBytes', '(I[B)V')
         self.setDate = self.method('setDate', '(ILjava/sql/Date;)V')
         self.setDouble = self.method('setDouble', '(ID)V')
         self.setFloat = self.method('setFloat', '(IF)V')
@@ -297,10 +319,12 @@ class PreparedStatement(Object):
         self.setLong = self.method('setLong', '(IJ)V')
         self.setNull = self.method('setNull', '(II)V')
         self.setString = self.method('setString', '(ILjava/lang/String;)V')
+        self.setTime = self.method('setTime', '(ILjava/sql/Time;)V')
         self.setTimestamp = self.method('setTimestamp', '(ILjava/sql/Timestamp;)V')
         self.Date = None
         self.ParameterMetaData = None
         self.ResultSet = None
+        self.Time = None
         self.Timestamp = None
         self.TypesNull = None
 
@@ -320,8 +344,10 @@ class ResultSet(Object):
         def __init__(self, cls, obj):
             super(ResultSet.Instance, self).__init__(cls, obj)
             self.close = lambda o=obj: cls.close(o)
+            self.getBytes = lambda i, o=obj: cls.getBytes(o, i)
             self.getDouble = lambda i, o=obj: cls.getDouble(o, i)
             self.getInt = lambda i, o=obj: cls.getInt(o, i)
+            self.getLong = lambda i, o=obj: cls.getLong(o, i)
             self.getString = lambda i, o=obj: cls.getString(o, i)
             self._next = lambda o=obj: cls.next(o)
             self.wasNull = lambda o=obj: cls.wasNull(o)
@@ -345,18 +371,25 @@ class ResultSet(Object):
             cls = self.env.get('java.sql.Timestamp')
             return cls(self.cls.getTimestamp(self.obj, i))
 
-        def next(self):
-            row = self._next()
+        def __next__(self):
+            try:
+                row = self._next()
+            except LangException:
+                raise StopIteration()
             if not row:
                 raise StopIteration()
             return row
 
+        next = __next__
+
     def __init__(self, env):
         super(ResultSet, self).__init__(env)
         self.close = self.method('close', '()V')
+        self.getBytes = self.method('getBytes', '(I)[B')
         self.getDate = self.method('getDate', '(I)Ljava/sql/Date;')
         self.getDouble = self.method('getDouble', '(I)D')
         self.getInt = self.method('getInt', '(I)I')
+        self.getLong = self.method('getLong', '(I)J')
         self.getMetaData = self.method('getMetaData', '()Ljava/sql/ResultSetMetaData;')
         self.getString = self.method('getString', '(I)Ljava/lang/String;')
         self.getTime = self.method('getTime', '(I)Ljava/sql/Time;')
@@ -487,7 +520,7 @@ class Time(Date):
             self.getTime = lambda o=obj: cls.getTime(o)
             self.setTime = lambda time, o=obj: cls.setTime(o, time)
 
-        def to_time(self):
+        def to_python(self):
             offset = self.getTime() % 86400000
             microsecond, offset = (offset % 1000) * 1000, offset // 1000
             second, offset = offset % 60, offset // 60
@@ -497,7 +530,7 @@ class Time(Date):
     def __init__(self, env):
         super(Time, self).__init__(env)
         if self.class_name == Time.class_name:
-            self.cons = self.constructor('J')
+            self.cons_j = self.constructor('J')
         self.getTime = self.method('getTime', '()J')
         self.setTime = self.method('setTime', '(J)V')
         self._valueOf = self.static_method('valueOf', '(Ljava/lang/String;)Ljava/sql/Time;')
@@ -505,15 +538,20 @@ class Time(Date):
     def valueOf(self, s):
         return self(self._valueOf(self.cls, s))
 
-    def from_time(self, t):
-        offset = (t.hour * 3600) + (t.minute * 60) + t.second + (t.microsecond / 1e6)
-        return self.new(offset*1000.)
-
     def new(self, *args):
         if len(args) == 1:
-            return self.cons(int(args[0]))
+            if isinstance(args[0], int):
+                return self.cons_j(int(args[0]))
         return super(Time, self).new(*args)
 
+    def from_python(self, value):
+        offset = (
+            (value.hour * 3600) +
+            (value.minute * 60) +
+            value.second +
+            (value.microsecond / 1e6)
+        )
+        return self.new(int(offset * 1000))
 
 
 class Timestamp(Date):
@@ -528,27 +566,53 @@ class Timestamp(Date):
             self.getTime = lambda o=obj: cls.getTime(o)
             self.setTime = lambda time, o=obj: cls.setTime(o, time)
 
-        def to_datetime(self):
-            return datetime.datetime.fromtimestamp(self.getTime()/1000.)
+        def to_python(self):
+            cal = self.cls.Calendar.getInstance()
+            cal.setTimeInMillis(self.getTime())
+            return datetime.datetime(
+                cal.YEAR,
+                cal.MONTH,
+                cal.DAY_OF_MONTH,
+                cal.HOUR_OF_DAY,
+                cal.MINUTE,
+                cal.SECOND,
+                cal.MILLISECOND * 1000
+            )
 
     def __init__(self, env):
         super(Timestamp, self).__init__(env)
+        self.Calendar = self.env.get('java.util.Calendar')
         if self.class_name == Timestamp.class_name:
-            self.cons = self.constructor('J')
+            self.cons_j = self.constructor('J')
+            self.cons6 = self.constructor('IIIIIII')
         self.getTime = self.method('getTime', '()J')
         self.setTime = self.method('setTime', '(J)V')
-        self._valueOf = self.static_method('valueOf', '(Ljava/lang/String;)Ljava/sql/Timestamp;')
+        self._valueOf = self.static_method(
+            'valueOf',
+            '(Ljava/lang/String;)Ljava/sql/Timestamp;'
+        )
 
     def valueOf(self, s):
         return self(self._valueOf(self.cls, s))
 
-    def from_datetime(self, dt):
-        return self.new(round(dt.timestamp()*1000.))
-
     def new(self, *args):
         if len(args) == 1:
-            return self.cons(int(args[0]))
+            if isinstance(args[0], int):
+                return self.cons_j(int(args[0]))
         return super(Timestamp, self).new(*args)
+
+    def from_python(self, value):
+        if isinstance(value, datetime.datetime):
+            cal = self.Calendar.getInstance()
+            cal.set(self.cal.YEAR, value.year)
+            cal.set(self.cal.MONTH, value.month)
+            cal.set(self.cal.DAY_OF_MONTH, value.day)
+            cal.set(self.cal.HOUR_OF_DAY, value.hour)
+            cal.set(self.cal.MINUTE, value.minute)
+            cal.set(self.cal.SECOND, value.second)
+            cal.set(self.cal.MILLISECOND, value.microsecond // 1000)
+            value = cal.getTimeInMillis()
+        return self.new(value)
 
 
 class Types(Object):

@@ -1,6 +1,8 @@
 # -*- coding: utf8 -*-
+import datetime
 import logging
 from py2jdbc.wrap import get_env
+# noinspection PyUnresolvedReferences
 from py2jdbc.util import GregorianCalendar
 from tests.config import JAVA_OPTS
 
@@ -34,3 +36,14 @@ def test_calendar():
     assert cal.MINUTE == 34
     assert cal.SECOND == 56
     assert cal.MILLISECOND == 0
+
+
+def test_date():
+    cls = _env.get('java.util.Date')
+    today = datetime.date.today()
+    obj = cls.from_python(today)
+    cal = _env.get('java.util.GregorianCalendar').new()
+    cal.setTime(obj.obj)
+    assert cal.YEAR == today.year
+    assert cal.MONTH == today.month
+    assert cal.DAY_OF_MONTH == today.day

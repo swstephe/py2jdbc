@@ -1,4 +1,5 @@
 # -*- coding: utf8 -*-
+import datetime
 from py2jdbc.lang import Object
 
 
@@ -13,10 +14,6 @@ class Calendar(Object):
             super(Calendar.Instance, self).__init__(cls, obj)
             self.get = lambda flag, o=obj: cls.get(o, flag)
             self.getTimeInMillis = lambda o=obj: cls.getTimeInMillis(o)
-            self._set2 = lambda o=obj, *a: cls._set2(o, *a)
-            self._set3 = lambda o=obj, *a: cls._set3(o, *a)
-            self._set5 = lambda o=obj, *a: cls._set5(o, *a)
-            self._set6 = lambda o=obj, *a: cls._set6(o, *a)
             self.setTimeInMillis = lambda millis, o=obj: cls.setTimeInMillis(o, millis)
 
         @property
@@ -91,16 +88,23 @@ class Calendar(Object):
         def ZONE_OFFSET(self):
             return self.get(self.cls.ZONE_OFFSET)
 
+        def getTime(self):
+            cls = self.env.get('java.util.Date')
+            return cls(self.cls.getTime(self.obj))
+
         def set(self, *args):
             if len(args) == 2:
-                return self._set2(self.obj, *args)
+                return self.cls.set2(self.obj, *args)
             if len(args) == 3:
-                return self._set3(self.obj, *args)
+                return self.cls.set3(self.obj, *args)
             if len(args) == 5:
-                return self._set5(self.obj, *args)
+                return self.cls.set5(self.obj, *args)
             if len(args) == 6:
-                return self._set6(self.obj, *args)
+                return self.cls.set6(self.obj, *args)
             raise ValueError("incorrect number of arguments: %d" % len(args))
+
+        def setTime(self, date_instance):
+            return self.cls.setTime(self.obj, date_instance)
 
     def __init__(self, env):
         super(Calendar, self).__init__(env)
@@ -148,12 +152,15 @@ class Calendar(Object):
         self._WEEK_OF_YEAR = self.static_field('WEEK_OF_YEAR', 'I')
         self._YEAR = self.static_field('YEAR', 'I')
         self._ZONE_OFFSET = self.static_field('ZONE_OFFSET', 'I')
+        self._getInstance0 = self.static_method('getInstance', '()Ljava/util/Calendar;')
         self.get = self.method('get', '(I)I')
+        self.getTime = self.method('getTime', '()Ljava/util/Date;')
         self.getTimeInMillis = self.method('getTimeInMillis', '()J')
-        self._set2 = self.method('set', '(II)V')
-        self._set3 = self.method('set', '(III)V')
-        self._set5 = self.method('set', '(IIIII)V')
-        self._set6 = self.method('set', '(IIIIII)V')
+        self.set2 = self.method('set', '(II)V')
+        self.set3 = self.method('set', '(III)V')
+        self.set5 = self.method('set', '(IIIII)V')
+        self.set6 = self.method('set', '(IIIIII)V')
+        self.setTime = self.method('setTime', '(Ljava/util/Date;)V')
         self.setTimeInMillis = self.method('setTimeInMillis', '(J)V')
 
     @property
@@ -332,6 +339,11 @@ class Calendar(Object):
     def ZONE_OFFSET(self):
         return self._ZONE_OFFSET.get(self.cls)
 
+    def getInstance(self, *args):
+        if len(args) == 0:
+            return self(self._getInstance0(self.cls))
+        raise RuntimeError("unexpected arguments: %r" % args)
+
 
 class GregorianCalendar(Calendar):
     """
@@ -363,7 +375,7 @@ class GregorianCalendar(Calendar):
 
     def new(self, *args):
         if len(args) == 0:
-            return self.cons0(*args)
+            return self.cons0()
         elif len(args) == 3:
             return self.cons3(*args)
         elif len(args) == 5:
@@ -386,8 +398,14 @@ class Date(Object):
         def __init__(self, cls, obj):
             super(Date.Instance, self).__init__(cls, obj)
 
+        def to_python(self):
+            cal = self.cls.cal.new()
+            cal.setTime(self.obj)
+            return datetime.date(cal.YEAR, cal.MONTH, cal.DAY_OF_MONTH)
+
     def __init__(self, env):
         super(Date, self).__init__(env)
+        self.cal = self.env.get('java.util.GregorianCalendar')
         if self.class_name == Date.class_name:
             self.cons_j = self.constructor('J')
 
@@ -397,7 +415,11 @@ class Date(Object):
                 return self.cons_j(args[0])
         return super(Date, self).new(*args)
 
-
+    def from_python(self, value):
+        if isinstance(value, datetime.date):
+            cal = self.cal.new(value.year, value.month, value.day)
+            return cal.getTime()
+        return self.new(value)
 
 
 class Enumeration(Object):

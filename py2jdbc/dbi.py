@@ -1,12 +1,10 @@
 # -*- coding: utf8 -*-
 import six
 from collections import OrderedDict
-import datetime
 import time
 
 from py2jdbc.wrap import get_env
 from py2jdbc.lang import LangException
-from py2jdbc.math import BigDecimal
 from py2jdbc.sql import SQLException
 from py2jdbc.exc import (
     Warning,
@@ -29,16 +27,21 @@ paramstyle = 'qmark'
 class DataTypes(object):
     def __init__(self):
         self.registry = OrderedDict()
+        self.regtypes = OrderedDict()
 
     def __getitem__(self, key):
-        return self.registry.get(key)
+        return (self.regtypes if isinstance(key, int) else self.registry).get(key)
 
     def __iter__(self):
         return iter(self.registry)
 
     def register(self, cls):
-        print('registering', cls.__name__)
+        if cls.__name__ in self.registry:
+            raise RuntimeError("duplicate type name in registry")
         self.registry[cls.__name__] = cls
+        if cls.type_code in self.regtypes:
+            raise RuntimeError("duplicate type code in registry")
+        self.regtypes[cls.type_code] = cls
         return cls
 
 
@@ -56,24 +59,31 @@ class DataType(object):
 
 @datatypes.register
 class ARRAY(DataType):
-    pass
+    type_code = 2003
 
 
 @datatypes.register
 class BIGINT(DataType):
-    def get(self, rs, i):
-        value = rs.getInt(i)
-        return None if rs.wasNull() else value
+    type_code = -5
 
+    def get(self, rs, i):
+        value = rs.getLong(i)
+        return None if rs.wasNull() else value
 
 
 @datatypes.register
 class BINARY(DataType):
-    pass
+    type_code = -2
+
+    def get(self, rs, i):
+        value = rs.getBytes(i)
+        return None if rs.wasNull() else value
 
 
 @datatypes.register
 class BIT(DataType):
+    type_code = -7
+
     def get(self, rs, i):
         value = rs.getInt(i)
         return None if rs.wasNull() else value
@@ -81,11 +91,13 @@ class BIT(DataType):
 
 @datatypes.register
 class BLOB(DataType):
-    pass
+    type_code = 2004
 
 
 @datatypes.register
 class BOOLEAN(DataType):
+    type_code = 16
+
     def get(self, rs, i):
         value = rs.getBoolean(i)
         return None if rs.wasNull() else value
@@ -93,6 +105,8 @@ class BOOLEAN(DataType):
 
 @datatypes.register
 class CHAR(DataType):
+    type_code = 1
+
     def get(self, rs, i):
         value = rs.getString(i)
         return None if rs.wasNull() else value
@@ -100,24 +114,27 @@ class CHAR(DataType):
 
 @datatypes.register
 class CLOB(DataType):
-    pass
+    type_code = 2005
 
 
 @datatypes.register
 class DATALINK(DataType):
-    pass
+    type_code = 70
 
 
 @datatypes.register
 class DATE(DataType):
-    # 'DATE': ('getDate', '%Y-%m-%d', 'date'),
+    type_code = 91
+
     def get(self, rs, i):
         value = rs.getDate(i)
-        return None if rs.wasNull() else value
+        return None if rs.wasNull() else value.to_python()
 
 
 @datatypes.register
 class DECIMAL(DataType):
+    type_code = 3
+
     def get(self, rs, i):
         value = rs.getDouble(i)
         return None if rs.wasNull() else value
@@ -125,11 +142,13 @@ class DECIMAL(DataType):
 
 @datatypes.register
 class DISTINCT(DataType):
-    pass
+    type_code = 2001
 
 
 @datatypes.register
 class DOUBLE(DataType):
+    type_code = 8
+
     def get(self, rs, i):
         value = rs.getDouble(i)
         return None if rs.wasNull() else value
@@ -137,6 +156,8 @@ class DOUBLE(DataType):
 
 @datatypes.register
 class FLOAT(DataType):
+    type_code = 6
+
     def get(self, rs, i):
         value = rs.getFloat(i)
         return None if rs.wasNull() else value
@@ -144,6 +165,8 @@ class FLOAT(DataType):
 
 @datatypes.register
 class INTEGER(DataType):
+    type_code = 4
+
     def get(self, rs, i):
         value = rs.getInt(i)
         return None if rs.wasNull() else value
@@ -151,11 +174,13 @@ class INTEGER(DataType):
 
 @datatypes.register
 class JAVA_OBJECT(DataType):
-    pass
+    type_code = 2000
 
 
 @datatypes.register
 class LONGNVARCHAR(DataType):
+    type_code = -16
+
     def get(self, rs, i):
         value = rs.getString(i)
         return None if rs.wasNull() else value
@@ -163,11 +188,17 @@ class LONGNVARCHAR(DataType):
 
 @datatypes.register
 class LONGVARBINARY(DataType):
-    pass
+    type_code = -4
+
+    def get(self, rs, i):
+        value = rs.getBytes(i)
+        return None if rs.wasNull() else value
 
 
 @datatypes.register
 class LONGVARCHAR(DataType):
+    type_code = -1
+
     def get(self, rs, i):
         value = rs.getString(i)
         return None if rs.wasNull() else value
@@ -175,6 +206,8 @@ class LONGVARCHAR(DataType):
 
 @datatypes.register
 class NCHAR(DataType):
+    type_code = -15
+
     def get(self, rs, i):
         value = rs.getString(i)
         return None if rs.wasNull() else value
@@ -182,16 +215,21 @@ class NCHAR(DataType):
 
 @datatypes.register
 class NCLOB(DataType):
-    pass
+    type_code = 2011
 
 
 @datatypes.register
 class NULL(DataType):
-    pass
+    type_code = 0
+
+    def get(self, rs, i):
+        return None
 
 
 @datatypes.register
 class NUMERIC(DataType):
+    type_code = 2
+
     def get(self, rs, i):
         value = rs.getDouble()
         return None if rs.wasNull() else value
@@ -199,6 +237,8 @@ class NUMERIC(DataType):
 
 @datatypes.register
 class NVARCHAR(DataType):
+    type_code = -9
+
     def get(self, rs, i):
         value = rs.getString()
         return None if rs.wasNull() else value
@@ -206,11 +246,13 @@ class NVARCHAR(DataType):
 
 @datatypes.register
 class OTHER(DataType):
-    pass
+    type_code = 1111
 
 
 @datatypes.register
 class REAL(DataType):
+    type_code = 7
+
     def get(self, rs, i):
         value = rs.getDouble(i)
         return None if rs.wasNull() else value
@@ -218,21 +260,23 @@ class REAL(DataType):
 
 @datatypes.register
 class REF(DataType):
-    pass
+    type_code = 2006
 
 
 @datatypes.register
 class REF_CURSOR(DataType):
-    pass
+    type_code = 2012
 
 
 @datatypes.register
 class ROWID(DataType):
-    pass
+    type_code = -8
 
 
 @datatypes.register
 class SMALLINT(DataType):
+    type_code = 5
+
     def get(self, rs, i):
         value = rs.getInt(i)
         return None if rs.wasNull() else value
@@ -240,49 +284,46 @@ class SMALLINT(DataType):
 
 @datatypes.register
 class SQLXML(DataType):
-    pass
+    type_code = 2009
 
 
 @datatypes.register
 class STRUCT(DataType):
-    pass
-
-
-@datatypes.register
-class TEXT(DataType):
-    def get(self, rs, i):
-        value = rs.getString(i)
-        return None if rs.wasNull() else value
+    type_code = 2002
 
 
 @datatypes.register
 class TIME(DataType):
-    # 'TIME': ('getTime', '%H:M:%S', 'time'),
+    type_code = 92
+
     def get(self, rs, i):
         value = rs.getTime(i)
-        return None if rs.wasNull() else value
+        return None if rs.wasNull() else value.to_python()
 
 
 @datatypes.register
 class TIME_WITH_TIMEZONE(DataType):
-    pass
+    type_code = 2013
 
 
 @datatypes.register
 class TIMESTAMP(DataType):
-    # 'TIMESTAMP': ('getTimestamp', '%Y-%m-%d %H:%M:%S.%f'),
+    type_code = 93
+
     def get(self, rs, i):
         value = rs.getTimestamp(i)
-        return None if rs.wasNull() else value
+        return None if rs.wasNull() else value.to_python()
 
 
 @datatypes.register
 class TIMESTAMP_WITH_TIMEZONE(DataType):
-    pass
+    type_code = 2014
 
 
 @datatypes.register
 class TINYINT(DataType):
+    type_code = -6
+
     def get(self, rs, i):
         value = rs.getInt(i)
         return None if rs.wasNull() else value
@@ -290,11 +331,13 @@ class TINYINT(DataType):
 
 @datatypes.register
 class VARBINARY(DataType):
-    pass
+    type_code = -3
 
 
 @datatypes.register
 class VARCHAR(DataType):
+    type_code = 12
+
     def get(self, rs, i):
         value = rs.getString(i)
         return None if rs.wasNull() else value
@@ -332,24 +375,28 @@ class Cursor(object):
         meta = self._rs.getMetaData()
         try:
             count = meta.getColumnCount()
-        except LangException.Instance as e:
+        except LangException.Instance:
             return
         errors = []
         for i in range(count):
-            fn = datatypes[meta.getColumnTypeName(i + 1)]()
-            if fn is None:
+            dt = datatypes[meta.getColumnType(i + 1)]
+            if dt is None:
                 errors.append("unsupported datatype %r (%d) for column %r" % (
                     meta.getColumnTypeName(i + 1),
                     meta.getColumnType(i + 1),
                     meta.getColumnName(i + 1)
                 ))
-            yield fn
+            yield dt()
         if errors:
             raise DataError('\n'.join(errors))
 
     def _fetch_row(self, funcs):
         for i, fn in enumerate(funcs):
             yield fn.get(self._rs, i + 1)
+
+    @property
+    def connection(self):
+        return self._conn
 
     @property
     def description(self):
@@ -370,18 +417,30 @@ class Cursor(object):
             return None
         meta = self._rs.getMetaData()
         count = meta.getColumnCount()
-        return [
-            [
+        results = tuple(
+            (
                 meta.getColumnName(i + 1),
-                datatypes[meta.getColumnTypeName(i + 1)],
+                meta.getColumnType(i + 1),
+                meta.getColumnTypeName(i + 1),
                 meta.getColumnDisplaySize(i + 1),
-                None,
                 meta.getPrecision(i + 1),
                 meta.getScale(i + 1),
                 meta.isNullable(i + 1) == meta.cls.columnNullable
-            ]
+            )
             for i in range(count)
-        ]
+        )
+        return tuple(
+            (
+                res[0],
+                datatypes[res[1]],
+                res[3],
+                None,
+                res[4],
+                res[5],
+                res[6]
+            )
+            for res in results
+        )
 
     def callproc(self, procname, *args):
         """
@@ -413,11 +472,10 @@ class Cursor(object):
         :param args: a sequence of bind variables
         :return: the Cursor object
         """
-        _env = self._conn.env
         if not isinstance(sql, six.string_types):
             raise ValueError("sql must be string")
         try:
-            stmt = self._conn.prepareStatement(sql)
+            stmt = self._conn.conn.prepareStatement(sql)
         except SQLException.Instance as e:
             raise OperationalError(e.message)
         if args:
@@ -456,12 +514,11 @@ class Cursor(object):
         :param rows: a sequence of rows to execute
         :return: True if successful
         """
-        _env = self._conn.env
         if not isinstance(sql, six.string_types):
             raise ValueError("wrong datatype for sql")
         self.rowcount = None
         try:
-            stmt = self._conn.prepareStatement(sql)
+            stmt = self._conn.conn.prepareStatement(sql)
         except SQLException.Instance as e:
             raise DatabaseError(e.message)
 
@@ -479,10 +536,10 @@ class Cursor(object):
         :return: a sequence of sequences or empty sequence.
         """
         funcs = tuple(self._fetch_funcs())
-        rows = []
-        while self._rs.next():
-            rows.append(tuple(self._fetch_row(funcs)))
-        return tuple(rows)
+        return tuple(
+            tuple(self._fetch_row(funcs))
+            for row in self._rs
+        )
 
     def fetchmany(self, size=None):
         """
@@ -496,11 +553,11 @@ class Cursor(object):
         rows = []
         for i in range(size or self.arraysize):
             try:
-                self._rs.next()
+                six.next(self._rs)
             except StopIteration:
                 break
             rows.append(tuple(self._fetch_row(funcs)))
-        return rows
+        return tuple(rows)
 
     def fetchone(self):
         """
@@ -612,7 +669,7 @@ class Connection(object):
         :return: a new Cursor object
         """
         self.is_connected()
-        return Cursor(self.conn)
+        return Cursor(self)
 
     def open(self, *args, **kwargs):
         """

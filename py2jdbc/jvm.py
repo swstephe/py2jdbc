@@ -5,7 +5,6 @@ import sys
 from ctypes.util import find_library
 
 platform = sys.platform
-
 CP_SEP = ';' if platform == 'win32' else ':'
 
 if platform == 'win32':
@@ -95,6 +94,8 @@ def find_libjvm():
     else:   # linux?
         # search some common locations
         for root in ('/usr/lib/jvm', '/usr/java'):
+            if not os.path.exists(root):
+                continue
             for child in sorted(os.listdir(root)):
                 path = os.path.realpath(os.path.join(root, child))
                 if not os.path.isdir(path):

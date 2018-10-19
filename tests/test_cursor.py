@@ -181,7 +181,7 @@ def test_rowcount_executemany2():
 def test_executemany_sequence():
     cu.execute("delete from tests")
     cu.executemany("insert into tests(id, name, real_field) values (?, ?, ?)", [
-        (i + 1, 'test_executemany_sequence', 3.14*i)
+        (i + 1, 'test_executemany_sequence', 3.14 * i)
         for i in range(10)
     ])
     assert cu.rowcount == 10
@@ -254,7 +254,6 @@ def test_array_size():
     assert len(res) == 1
 
 
-
 def test_fetchmany():
     global cu
     cu.execute("delete from tests")
@@ -275,40 +274,28 @@ def test_fetchmany_kwargs():
 def test_description():
     global cu
     cu.execute("select * from tests")
-    assert cu.description == [
-        ['id', py2jdbc.INTEGER, MAX_INT, None, 0, 0, False],
-        ['name', py2jdbc.TEXT, MAX_INT, None, 0, 0, True],
-        ['integer_field', py2jdbc.INTEGER, MAX_INT, None, 0, 0, True],
-        ['real_field', py2jdbc.REAL, MAX_INT, None, 0, 0, True],
-        ['text_field', py2jdbc.TEXT, MAX_INT, None, 0, 0, True],
-        ['blob_field', py2jdbc.BLOB, MAX_INT, None, 0, 0, True],
-    ]
+    assert cu.description == (
+        ('id', py2jdbc.INTEGER, MAX_INT, None, 0, 0, False),
+        ('name', py2jdbc.VARCHAR, MAX_INT, None, 0, 0, True),
+        ('integer_field', py2jdbc.INTEGER, MAX_INT, None, 0, 0, True),
+        ('real_field', py2jdbc.REAL, MAX_INT, None, 0, 0, True),
+        ('text_field', py2jdbc.VARCHAR, MAX_INT, None, 0, 0, True),
+        ('blob_field', py2jdbc.BLOB, MAX_INT, None, 0, 0, True),
+    )
     cu.execute("select null from tests")
-    assert cu.description == [
-        ['null', py2jdbc.NULL, MAX_INT, None, 0, 0, True],
-    ]
+    assert cu.description == (
+        ('null', py2jdbc.NULL, MAX_INT, None, 0, 0, True),
+    )
 
 
-# def test_fetchall():
-#     cu.execute("select name from tests")
-#     res = cu.fetchall()
-#     assert len(res) == 1
-#     res = cu.fetchall()
-#     assert res == []
-#
-#
-# def test_setinputsizes():
-#     cu.setinputsizes([3, 4, 5])
-#
-#
-# def test_setoutputsize():
-#     cu.setoutputsize(5, 0)
-#
-#
-# def test_setoutputsize_no_column():
-#     cu.setoutputsize(42)
-#
-#
-# def test_cursor_connection():
-#     global cx, cu
-#     assert cu.connection == cx
+def test_fetchall():
+    cu.execute("select name from tests")
+    res = cu.fetchall()
+    assert len(res) == 1
+    res = cu.fetchall()
+    assert res == tuple()
+
+
+def test_cursor_connection():
+    global cx, cu
+    assert cu.connection == cx

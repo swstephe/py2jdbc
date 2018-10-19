@@ -20,10 +20,10 @@ For example:
 
 .. code-block::python
 
-    from py2jdbc import wrap
+    from py2jdbc.wrap import get_env
 
     # loads the local thread ThreadEnv instance
-    env = wrap.get_env()
+    env = get_env()
     # access java.lang.System wrapper
     system = env.get('java.lang.System')
 

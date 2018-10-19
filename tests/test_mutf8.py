@@ -193,10 +193,10 @@ def test_errors():
     assert mutf8_encode(mutf8_unichr(0x100000), errors='ignore') == six.b('')
     assert mutf8_encode(mutf8_unichr(0x100000), errors='replace') == six.b('?')
     assert (
-            mutf8_encode(mutf8_unichr(0x100000), errors='xmlcharrefreplace')
-            == six.b('&#{};'.format(0x100000))
+        mutf8_encode(mutf8_unichr(0x100000), errors='xmlcharrefreplace') ==
+        six.b('&#{};'.format(0x100000))
     )
     assert (
-            mutf8_encode(mutf8_unichr(0x100000), errors='backslashreplace')
-            == six.b('\\U00100000')
+        mutf8_encode(mutf8_unichr(0x100000), errors='backslashreplace') ==
+        six.b('\\U00100000')
     )

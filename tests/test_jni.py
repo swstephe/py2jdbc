@@ -5,7 +5,7 @@ from ctypes import byref, string_at
 import logging
 # noinspection PyPackageRequirements
 import pytest
-from py2jdbc import jni
+import py2jdbc.jni
 from tests.config import (
     CLASSPATH, JAVA_OPTS, BOOLEANS,
     FIELDS, STATIC_FIELDS,
@@ -43,7 +43,7 @@ class TObject(object):
         self.cls = None
 
     def __eq__(self, obj):
-        args = jni.jvalue.__mul__(1)()
+        args = py2jdbc.jni.jvalue.__mul__(1)()
         setattr(args[0], 'l', obj)
         return _env.CallBooleanMethodA(obj, self._equals, args)
 
@@ -79,7 +79,7 @@ class TClass(TObject):
 
     def getDeclaredField(self, name):
         str_obj = _env.NewStringUTF(name)
-        args = jni.jvalue.__mul__(1)()
+        args = py2jdbc.jni.jvalue.__mul__(1)()
         setattr(args[0], 'l', str_obj)
         field = _env.CallObjectMethodA(self.obj, self._getDeclaredField, args)
         _env.DeleteLocalRef(str_obj)
@@ -92,7 +92,7 @@ class TClass(TObject):
         _classes = _env.NewObjectArray(len(classes), cls, None)
         for i, _cls in enumerate(classes):
             _env.SetObjectArrayElement(_classes, i, _cls)
-        args = jni.jvalue.__mul__(2)()
+        args = py2jdbc.jni.jvalue.__mul__(2)()
         setattr(args[0], 'l', str_obj)
         setattr(args[1], 'l', _classes)
         method = _env.CallObjectMethodA(self.obj, self._getDeclaredMethod, args)
@@ -103,17 +103,17 @@ class TClass(TObject):
 
     def forName(self, name):
         str_obj = _env.NewStringUTF(name)
-        args = jni.jvalue.__mul__(1)()
+        args = py2jdbc.jni.jvalue.__mul__(1)()
         setattr(args[0], 'l', str_obj)
         cls_obj = _env.CallStaticObjectMethodA(self.cls, self._forName, args)
         return TClass(cls_obj)
 
     def getName(self):
-        args = jni.jvalue.__mul__(0)()
+        args = py2jdbc.jni.jvalue.__mul__(0)()
         str_obj = _env.CallObjectMethodA(self.obj, self._getName, args)
         chars = _env.GetStringUTFChars(str_obj, None)
         _env.DeleteLocalRef(str_obj)
-        return jni.decode(chars)
+        return py2jdbc.jni.decode(chars)
 
 
 class TReflectField(TObject):
@@ -126,18 +126,18 @@ class TReflectField(TObject):
         self._hashCode = _env.GetMethodID(self.cls, 'hashCode', '()I')
 
     def getName(self):
-        args = jni.jvalue.__mul__(0)()
+        args = py2jdbc.jni.jvalue.__mul__(0)()
         str_obj = _env.CallObjectMethodA(self.obj, self._getName, args)
         chars = _env.GetStringUTFChars(str_obj, None)
         _env.DeleteLocalRef(str_obj)
-        return jni.decode(chars)
+        return py2jdbc.jni.decode(chars)
 
     def getType(self):
-        args = jni.jvalue.__mul__(0)()
+        args = py2jdbc.jni.jvalue.__mul__(0)()
         return _env.CallObjectMethodA(self.obj, self._getType, args)
 
     def hashCode(self):
-        args = jni.jvalue.__mul__(0)()
+        args = py2jdbc.jni.jvalue.__mul__(0)()
         return _env.CallIntMethodA(self.obj, self._hashCode, args)
 
 
@@ -164,18 +164,18 @@ class TReflectMethod(TObject):
         self._hashCode = _env.GetMethodID(self.cls, 'hashCode', '()I')
 
     def getName(self):
-        args = jni.jvalue.__mul__(0)()
+        args = py2jdbc.jni.jvalue.__mul__(0)()
         str_obj = _env.CallObjectMethodA(self.obj, self._getName, args)
         chars = _env.GetStringUTFChars(str_obj, None)
         _env.DeleteLocalRef(str_obj)
-        return jni.decode(chars)
+        return py2jdbc.jni.decode(chars)
 
     def getReturnType(self):
-        args = jni.jvalue.__mul__(0)()
+        args = py2jdbc.jni.jvalue.__mul__(0)()
         return _env.CallObjectMethodA(self.obj, self.getReturnType, args)
 
     def getParameterTypes(self):
-        args = jni.jvalue.__mul__(0)()
+        args = py2jdbc.jni.jvalue.__mul__(0)()
         _classes = _env.CallObjectMethodA(self.obj, self._getParameterTypes, args)
         return [
             TClass(_env.GetObjectArrayElement(_classes, i))
@@ -183,26 +183,26 @@ class TReflectMethod(TObject):
         ]
 
     def hashCode(self):
-        args = jni.jvalue.__mul__(0)()
+        args = py2jdbc.jni.jvalue.__mul__(0)()
         return _env.CallIntMethodA(self.obj, self._hashCode, args)
 
 
 def setup_module():
     global _env
-    _env = jni.get_env(**JAVA_OPTS)
+    _env = py2jdbc.jni.get_env(**JAVA_OPTS)
 
 
 def test_env():
-    e2 = jni.JNIEnv_p()
-    rc = jni.vm[0].GetEnv(byref(e2), jni.JNI_VERSION_1_2)
-    assert rc == jni.JNI_OK
-    rc = jni.vm[0].AttachCurrentThread(byref(e2), None)
-    assert rc == jni.JNI_OK
-    rc = jni.vm[0].AttachCurrentThreadAsDaemon(byref(e2), None)
-    assert rc == jni.JNI_OK
-    v2 = jni.JavaVM_p()
+    e2 = py2jdbc.jni.JNIEnv_p()
+    rc = py2jdbc.jni.vm[0].GetEnv(byref(e2), py2jdbc.jni.JNI_VERSION_1_2)
+    assert rc == py2jdbc.jni.JNI_OK
+    rc = py2jdbc.jni.vm[0].AttachCurrentThread(byref(e2), None)
+    assert rc == py2jdbc.jni.JNI_OK
+    rc = py2jdbc.jni.vm[0].AttachCurrentThreadAsDaemon(byref(e2), None)
+    assert rc == py2jdbc.jni.JNI_OK
+    v2 = py2jdbc.jni.JavaVM_p()
     rc = _env.GetJavaVM(byref(v2))
-    assert rc == jni.JNI_OK
+    assert rc == py2jdbc.jni.JNI_OK
 
 
 def test_version():
@@ -212,12 +212,12 @@ def test_version():
 
 
 def _string(src):
-    c = jni.jchar.__mul__(len(src))()
+    c = py2jdbc.jni.jchar.__mul__(len(src))()
     for i in range(len(src)):
         c[i] = ord(src[i])
     s = _env.NewString(c, len(src))
     assert _env.GetStringLength(s) == len(src)
-    z = jni.jboolean()
+    z = py2jdbc.jni.jboolean()
     chars = _env.GetStringChars(s, byref(z))
     xxx = ''.join(chr(chars[i]) for i in range(len(src)))
     assert len(xxx) == len(src)
@@ -233,9 +233,9 @@ def test_string():
 
 
 def _utf(src):
-    src_utf = jni.encode(six.u(src))
+    src_utf = py2jdbc.jni.encode(six.u(src))
     s = _env.NewStringUTF(src_utf)
-    assert _env.GetObjectRefType(s) == jni.jobjectType.JNILocalRefType
+    assert _env.GetObjectRefType(s) == py2jdbc.jni.jobjectType.JNILocalRefType
     assert _env.GetStringUTFLength(s) == len(src_utf) - 1
     chars = _env.GetStringUTFChars(s, None)
     xxx = string_at(chars, len(src))
@@ -255,22 +255,22 @@ def test_boolean_array():
     count = random.randint(0, 9)
     data = [random.choice((False, True)) for _ in range(count)]
     a = _env.NewBooleanArray(count)
-    a0 = jni.jboolean.__mul__(count)()
+    a0 = py2jdbc.jni.jboolean.__mul__(count)()
     for i in range(count):
-        a0[i] = jni.jboolean(BOOLEANS[data[i]])
+        a0[i] = py2jdbc.jni.jboolean(BOOLEANS[data[i]])
     _env.SetBooleanArrayRegion(a, 0, count, a0)
     a1 = _env.GetBooleanArrayElements(a, None)
     assert all(a1[i] == a0[i] for i in range(count))
-    _env.ReleaseBooleanArrayElements(a, a1, jni.JNI_ABORT)
-    a2 = jni.jboolean.__mul__(count)()
+    _env.ReleaseBooleanArrayElements(a, a1, py2jdbc.jni.JNI_ABORT)
+    a2 = py2jdbc.jni.jboolean.__mul__(count)()
     _env.GetBooleanArrayRegion(a, 0, count, a2)
     assert all(a2[i] == a0[i] for i in range(count))
     for i in range(count):
-        a2[i] = jni.JNI_FALSE
+        a2[i] = py2jdbc.jni.JNI_FALSE
     _env.SetBooleanArrayRegion(a, 0, count, a2)
-    a3 = jni.jboolean.__mul__(count)()
+    a3 = py2jdbc.jni.jboolean.__mul__(count)()
     _env.GetBooleanArrayRegion(a, 0, count, a3)
-    assert all(a3[i] == jni.JNI_FALSE for i in range(count))
+    assert all(a3[i] == py2jdbc.jni.JNI_FALSE for i in range(count))
     _env.DeleteLocalRef(a)
 
 
@@ -278,20 +278,20 @@ def test_byte_array():
     count = random.randint(0, 9)
     data = [random.randint(MIN_BYTE, MAX_BYTE) for _ in range(count)]
     a = _env.NewByteArray(count)
-    a0 = jni.jbyte.__mul__(count)()
+    a0 = py2jdbc.jni.jbyte.__mul__(count)()
     for i in range(count):
         a0[i] = data[i]
     _env.SetByteArrayRegion(a, 0, count, a0)
     a1 = _env.GetByteArrayElements(a, None)
     assert all(a1[i] == data[i] for i in range(count))
-    _env.ReleaseByteArrayElements(a, a1, jni.JNI_ABORT)
-    a2 = jni.jbyte.__mul__(count)()
+    _env.ReleaseByteArrayElements(a, a1, py2jdbc.jni.JNI_ABORT)
+    a2 = py2jdbc.jni.jbyte.__mul__(count)()
     _env.GetByteArrayRegion(a, 0, count, a2)
     assert all(a2[i] == a0[i] for i in range(count))
     for i in range(count):
         a2[i] = 1
     _env.SetByteArrayRegion(a, 0, count, a2)
-    a3 = jni.jbyte.__mul__(count)()
+    a3 = py2jdbc.jni.jbyte.__mul__(count)()
     _env.GetByteArrayRegion(a, 0, count, a3)
     assert all(a3[i] == 1 for i in range(count))
     assert _env.GetArrayLength(a) == count
@@ -302,20 +302,20 @@ def test_char_array():
     count = random.randint(0, 9)
     data = [random.randint(MIN_CHAR, MAX_CHAR) for _ in range(count)]
     a = _env.NewCharArray(count)
-    a0 = jni.jchar.__mul__(count)()
+    a0 = py2jdbc.jni.jchar.__mul__(count)()
     for i in range(count):
         a0[i] = data[i]
     _env.SetCharArrayRegion(a, 0, count, a0)
     a1 = _env.GetCharArrayElements(a, None)
     assert all(a1[i] == data[i] for i in range(count))
-    _env.ReleaseCharArrayElements(a, a1, jni.JNI_ABORT)
-    a2 = jni.jchar.__mul__(count)()
+    _env.ReleaseCharArrayElements(a, a1, py2jdbc.jni.JNI_ABORT)
+    a2 = py2jdbc.jni.jchar.__mul__(count)()
     _env.GetCharArrayRegion(a, 0, count, a2)
     assert all(a2[i] == a0[i] for i in range(count))
     for i in range(count):
         a2[i] = 2
     _env.SetCharArrayRegion(a, 0, count, a2)
-    a3 = jni.jchar.__mul__(count)()
+    a3 = py2jdbc.jni.jchar.__mul__(count)()
     _env.GetCharArrayRegion(a, 0, count, a3)
     assert all(a3[i] == 2 for i in range(count))
     assert _env.GetArrayLength(a) == count
@@ -326,20 +326,20 @@ def test_short_array():
     count = random.randint(0, 9)
     data = [random.randint(MIN_SHORT, MAX_SHORT) for _ in range(count)]
     a = _env.NewShortArray(count)
-    a0 = jni.jshort.__mul__(count)()
+    a0 = py2jdbc.jni.jshort.__mul__(count)()
     for i in range(count):
         a0[i] = data[i]
     _env.SetShortArrayRegion(a, 0, count, a0)
     a1 = _env.GetShortArrayElements(a, None)
     assert all(a1[i] == data[i] for i in range(count))
-    _env.ReleaseShortArrayElements(a, a1, jni.JNI_ABORT)
-    a2 = jni.jshort.__mul__(count)()
+    _env.ReleaseShortArrayElements(a, a1, py2jdbc.jni.JNI_ABORT)
+    a2 = py2jdbc.jni.jshort.__mul__(count)()
     _env.GetShortArrayRegion(a, 0, count, a2)
     assert all(a2[i] == a0[i] for i in range(count))
     for i in range(count):
         a2[i] = 3
     _env.SetShortArrayRegion(a, 0, count, a2)
-    a3 = jni.jshort.__mul__(count)()
+    a3 = py2jdbc.jni.jshort.__mul__(count)()
     _env.GetShortArrayRegion(a, 0, count, a3)
     assert all(a3[i] == 3 for i in range(count))
     _env.DeleteLocalRef(a)
@@ -349,20 +349,20 @@ def test_int_array():
     count = random.randint(0, 9)
     data = [random.randint(MIN_INT, MAX_INT) for _ in range(count)]
     a = _env.NewIntArray(count)
-    a0 = jni.jint.__mul__(count)()
+    a0 = py2jdbc.jni.jint.__mul__(count)()
     for i in range(count):
         a0[i] = data[i]
     _env.SetIntArrayRegion(a, 0, count, a0)
     a1 = _env.GetIntArrayElements(a, None)
     assert all(a1[i] == data[i] for i in range(count))
-    _env.ReleaseIntArrayElements(a, a1, jni.JNI_ABORT)
-    a2 = jni.jint.__mul__(count)()
+    _env.ReleaseIntArrayElements(a, a1, py2jdbc.jni.JNI_ABORT)
+    a2 = py2jdbc.jni.jint.__mul__(count)()
     _env.GetIntArrayRegion(a, 0, count, a2)
     assert all(a2[i] == a0[i] for i in range(count))
     for i in range(count):
         a2[i] = 4
     _env.SetIntArrayRegion(a, 0, count, a2)
-    a3 = jni.jint.__mul__(count)()
+    a3 = py2jdbc.jni.jint.__mul__(count)()
     _env.GetIntArrayRegion(a, 0, count, a3)
     assert all(a3[i] == 4 for i in range(count))
     assert _env.GetArrayLength(a) == count
@@ -373,20 +373,20 @@ def test_long_array():
     count = random.randint(0, 9)
     data = [random.randint(MIN_LONG, MAX_LONG) for _ in range(count)]
     a = _env.NewLongArray(count)
-    a0 = jni.jlong.__mul__(count)()
+    a0 = py2jdbc.jni.jlong.__mul__(count)()
     for i in range(count):
         a0[i] = data[i]
     _env.SetLongArrayRegion(a, 0, count, a0)
     a1 = _env.GetLongArrayElements(a, None)
     assert all(a1[i] == a0[i] for i in range(count))
-    _env.ReleaseLongArrayElements(a, a1, jni.JNI_ABORT)
-    a2 = jni.jlong.__mul__(count)()
+    _env.ReleaseLongArrayElements(a, a1, py2jdbc.jni.JNI_ABORT)
+    a2 = py2jdbc.jni.jlong.__mul__(count)()
     _env.GetLongArrayRegion(a, 0, count, a2)
     assert all(a2[i] == a0[i] for i in range(count))
     for i in range(count):
         a2[i] = 5
     _env.SetLongArrayRegion(a, 0, count, a2)
-    a3 = jni.jlong.__mul__(count)()
+    a3 = py2jdbc.jni.jlong.__mul__(count)()
     _env.GetLongArrayRegion(a, 0, count, a3)
     assert all(a3[i] == 5 for i in range(count))
     assert _env.GetArrayLength(a) == count
@@ -396,25 +396,25 @@ def test_long_array():
 def test_float_array():
     count = random.randint(0, 9)
     data = [
-        jni.jfloat(random.uniform(MIN_FLOAT, MAX_FLOAT)).value
+        py2jdbc.jni.jfloat(random.uniform(MIN_FLOAT, MAX_FLOAT)).value
         for _ in range(count)
     ]
     a = _env.NewFloatArray(count)
-    a0 = jni.jfloat.__mul__(count)()
+    a0 = py2jdbc.jni.jfloat.__mul__(count)()
     for i in range(count):
         a0[i] = data[i]
     _env.SetFloatArrayRegion(a, 0, count, a0)
     a1 = _env.GetFloatArrayElements(a, None)
     assert all(a1[i] == a0[i] for i in range(count))
-    _env.ReleaseFloatArrayElements(a, a1, jni.JNI_ABORT)
-    a2 = jni.jfloat.__mul__(count)()
+    _env.ReleaseFloatArrayElements(a, a1, py2jdbc.jni.JNI_ABORT)
+    a2 = py2jdbc.jni.jfloat.__mul__(count)()
     _env.GetFloatArrayRegion(a, 0, count, a2)
     assert all(a2[i] == a0[i] for i in range(count))
-    value = jni.jfloat(6.5).value
+    value = py2jdbc.jni.jfloat(6.5).value
     for i in range(count):
         a2[i] = value
     _env.SetFloatArrayRegion(a, 0, count, a2)
-    a3 = jni.jfloat.__mul__(count)()
+    a3 = py2jdbc.jni.jfloat.__mul__(count)()
     _env.GetFloatArrayRegion(a, 0, count, a3)
     assert all(a3[i] == value for i in range(count))
     assert _env.GetArrayLength(a) == count
@@ -424,25 +424,25 @@ def test_float_array():
 def test_double_array():
     count = random.randint(0, 9)
     data = [
-        jni.jdouble(random.uniform(MIN_DOUBLE, MAX_DOUBLE)).value
+        py2jdbc.jni.jdouble(random.uniform(MIN_DOUBLE, MAX_DOUBLE)).value
         for _ in range(count)
     ]
     a = _env.NewDoubleArray(count)
-    a0 = jni.jdouble.__mul__(count)()
+    a0 = py2jdbc.jni.jdouble.__mul__(count)()
     for i in range(count):
         a0[i] = data[i]
     _env.SetDoubleArrayRegion(a, 0, count, a0)
     a1 = _env.GetDoubleArrayElements(a, None)
     assert all(a1[i] == a0[i] for i in range(count))
-    _env.ReleaseDoubleArrayElements(a, a1, jni.JNI_ABORT)
-    a2 = jni.jdouble.__mul__(count)()
+    _env.ReleaseDoubleArrayElements(a, a1, py2jdbc.jni.JNI_ABORT)
+    a2 = py2jdbc.jni.jdouble.__mul__(count)()
     _env.GetDoubleArrayRegion(a, 0, count, a2)
     assert all(a2[i] == a0[i] for i in range(count))
-    value = jni.jdouble(8.901234567).value
+    value = py2jdbc.jni.jdouble(8.901234567).value
     for i in range(count):
         a2[i] = value
     _env.SetDoubleArrayRegion(a, 0, count, a2)
-    a3 = jni.jdouble.__mul__(count)()
+    a3 = py2jdbc.jni.jdouble.__mul__(count)()
     _env.GetDoubleArrayRegion(a, 0, count, a3)
     assert all(a3[i] == value for i in range(count))
     assert _env.GetArrayLength(a) == count
@@ -462,7 +462,7 @@ def test_object_array():
         value = _env.GetObjectArrayElement(a, i)
         chars = _env.GetStringUTFChars(value, None)
         _env.DeleteLocalRef(value)
-        assert jni.decode(chars) == data[i]
+        assert py2jdbc.jni.decode(chars) == data[i]
     assert _env.GetArrayLength(a) == count
     _env.DeleteLocalRef(a)
     _env.DeleteLocalRef(cls)
@@ -481,12 +481,12 @@ def test_boolean():
     fid = _env.GetStaticFieldID(cls, 'TRUE', 'Ljava/lang/Boolean;')
     obj0 = _env.GetStaticObjectField(cls, fid)
     cons = _env.GetMethodID(cls, '<init>', '(Z)V')
-    args = jni.jvalue.__mul__(1)()
-    args[0].z = jni.JNI_TRUE
+    args = py2jdbc.jni.jvalue.__mul__(1)()
+    args[0].z = py2jdbc.jni.JNI_TRUE
     obj = _env.NewObjectA(cls, cons, args)
     mid = _env.GetMethodID(cls, 'booleanValue', '()Z')
-    assert _env.CallBooleanMethodA(obj, mid, args) == jni.JNI_TRUE
-    assert _env.CallBooleanMethodA(obj0, mid, args) == jni.JNI_TRUE
+    assert _env.CallBooleanMethodA(obj, mid, args) == py2jdbc.jni.JNI_TRUE
+    assert _env.CallBooleanMethodA(obj0, mid, args) == py2jdbc.jni.JNI_TRUE
     _env.DeleteLocalRef(obj0)
     _env.DeleteLocalRef(obj)
     _env.DeleteLocalRef(cls)
@@ -497,7 +497,7 @@ def test_byte():
     fid = _env.GetStaticFieldID(cls, 'MAX_VALUE', 'B')
     assert _env.GetStaticByteField(cls, fid) == MAX_BYTE
     cons = _env.GetMethodID(cls, '<init>', '(B)V')
-    args = jni.jvalue.__mul__(1)()
+    args = py2jdbc.jni.jvalue.__mul__(1)()
     args[0].b = 42
     obj = _env.NewObjectA(cls, cons, args)
     assert obj is not None
@@ -512,7 +512,7 @@ def test_char():
     fid = _env.GetStaticFieldID(cls, 'MAX_VALUE', 'C')
     assert _env.GetStaticCharField(cls, fid) == MAX_CHAR
     cons = _env.GetMethodID(cls, '<init>', '(C)V')
-    args = jni.jvalue.__mul__(1)()
+    args = py2jdbc.jni.jvalue.__mul__(1)()
     args[0].c = 0xbeef
     obj = _env.NewObjectA(cls, cons, args)
     mid = _env.GetMethodID(cls, 'charValue', '()C')
@@ -526,7 +526,7 @@ def test_short():
     fid = _env.GetStaticFieldID(cls, 'MAX_VALUE', 'S')
     assert _env.GetStaticShortField(cls, fid) == MAX_SHORT
     cons = _env.GetMethodID(cls, '<init>', '(S)V')
-    args = jni.jvalue.__mul__(1)()
+    args = py2jdbc.jni.jvalue.__mul__(1)()
     args[0].s = 420
     obj = _env.NewObjectA(cls, cons, args)
     mid = _env.GetMethodID(cls, 'shortValue', '()S')
@@ -540,7 +540,7 @@ def test_int():
     fid = _env.GetStaticFieldID(cls, 'MAX_VALUE', 'I')
     assert _env.GetStaticIntField(cls, fid) == MAX_INT
     cons = _env.GetMethodID(cls, '<init>', '(I)V')
-    args = jni.jvalue.__mul__(1)()
+    args = py2jdbc.jni.jvalue.__mul__(1)()
     args[0].i = 0x12345678
     obj = _env.NewObjectA(cls, cons, args)
     mid = _env.GetMethodID(cls, 'intValue', '()I')
@@ -554,7 +554,7 @@ def test_long():
     fid = _env.GetStaticFieldID(cls, 'MAX_VALUE', 'J')
     assert _env.GetStaticLongField(cls, fid) == MAX_LONG
     cons = _env.GetMethodID(cls, '<init>', '(J)V')
-    args = jni.jvalue.__mul__(1)()
+    args = py2jdbc.jni.jvalue.__mul__(1)()
     args[0].j = 0x123456789abc
     obj = _env.NewObjectA(cls, cons, args)
     assert obj is not None
@@ -569,8 +569,8 @@ def test_float():
     fid = _env.GetStaticFieldID(cls, 'MAX_VALUE', 'F')
     assert _env.GetStaticFloatField(cls, fid) == MAX_FLOAT
     cons = _env.GetMethodID(cls, '<init>', '(F)V')
-    args = jni.jvalue.__mul__(1)()
-    value = jni.jfloat(1234.567).value
+    args = py2jdbc.jni.jvalue.__mul__(1)()
+    value = py2jdbc.jni.jfloat(1234.567).value
     args[0].f = value
     obj = _env.NewObjectA(cls, cons, args)
     mid = _env.GetMethodID(cls, 'floatValue', '()F')
@@ -584,8 +584,8 @@ def test_double():
     fid = _env.GetStaticFieldID(cls, 'MAX_VALUE', 'D')
     assert _env.GetStaticDoubleField(cls, fid) == MAX_DOUBLE
     cons = _env.GetMethodID(cls, '<init>', '(D)V')
-    args = jni.jvalue.__mul__(1)()
-    value = jni.jdouble(1234.5678901234).value
+    args = py2jdbc.jni.jvalue.__mul__(1)()
+    value = py2jdbc.jni.jdouble(1234.5678901234).value
     args[0].d = value
     obj = _env.NewObjectA(cls, cons, args)
     mid = _env.GetMethodID(cls, 'doubleValue', '()D')
@@ -602,13 +602,13 @@ def test_system():
         '(Ljava/lang/String;)Ljava/lang/String;'
     )
     s = _env.NewStringUTF('java.class.path')
-    args = jni.jvalue.__mul__(1)()
+    args = py2jdbc.jni.jvalue.__mul__(1)()
     setattr(args[0], 'l', s)
     result = _env.CallStaticObjectMethodA(cls, mid, args)
     _env.DeleteLocalRef(s)
     chars = _env.GetStringUTFChars(result, None)
     _env.DeleteLocalRef(result)
-    assert jni.decode(chars) == CLASSPATH
+    assert py2jdbc.jni.decode(chars) == CLASSPATH
     fid = _env.GetStaticFieldID(cls, 'out', 'Ljava/io/PrintStream;')
     result2 = _env.GetStaticObjectField(cls, fid)
     _env.DeleteLocalRef(result2)
@@ -623,7 +623,7 @@ def test_class():
         '(Ljava/lang/String;)Ljava/lang/Class;'
     )
     s = _env.NewStringUTF('java.lang.System')
-    args = jni.jvalue.__mul__(1)()
+    args = py2jdbc.jni.jvalue.__mul__(1)()
     setattr(args[0], 'l', s)
     result = _env.CallStaticObjectMethodA(cls, mid1, args)
     _env.DeleteLocalRef(s)
@@ -633,7 +633,7 @@ def test_class():
         'getName',
         '()Ljava/lang/String;'
     )
-    args = jni.jvalue.__mul__(0)()
+    args = py2jdbc.jni.jvalue.__mul__(0)()
     result = _env.CallObjectMethodA(
         cls,
         mid2,
@@ -641,7 +641,7 @@ def test_class():
     )
     chars = _env.GetStringUTFChars(result, None)
     _env.DeleteLocalRef(result)
-    assert jni.decode(chars) == 'java.lang.Class'
+    assert py2jdbc.jni.decode(chars) == 'java.lang.Class'
     _env.DeleteLocalRef(cls)
 
 
@@ -653,7 +653,7 @@ def test_driver_manager():
         '(Ljava/lang/String;)Ljava/sql/Connection;'
     )
     s = _env.NewStringUTF('jdbc:sqlite::memory:')
-    args = jni.jvalue.__mul__(1)()
+    args = py2jdbc.jni.jvalue.__mul__(1)()
     setattr(args[0], 'l', s)
     conn = _env.CallStaticObjectMethodA(cls, mid1, args)
     _env.DeleteLocalRef(s)
@@ -662,13 +662,13 @@ def test_driver_manager():
 
 
 def test_exceptions():
-    with pytest.raises(jni.JavaException) as e:
-        cls = _env.FindClass('foo.bar.baz')
+    with pytest.raises(py2jdbc.jni.JavaException) as e:
+        _env.FindClass('foo.bar.baz')
     _env.DeleteLocalRef(e.value.throwable)
     cls = _env.FindClass('java.sql.SQLException')
     cons = _env.GetMethodID(cls, '<init>', '()V')
     obj = _env.NewObjectA(cls, cons, None)
-    with pytest.raises(jni.JavaException) as e:
+    with pytest.raises(py2jdbc.jni.JavaException) as e:
         _env.Throw(obj)
     _env.DeleteLocalRef(e.value.throwable)
     _env.DeleteLocalRef(obj)
@@ -681,9 +681,9 @@ def test_reflect_field():
     field = tclass.getDeclaredField('MAX_VALUE')
     assert field.getName() == 'MAX_VALUE'
     fid = _env.FromReflectedField(field.obj)
-    is_static = jni.jboolean(jni.JNI_TRUE)
+    is_static = py2jdbc.jni.jboolean(py2jdbc.jni.JNI_TRUE)
     fld2 = _env.ToReflectedField(integer_cls, fid, is_static)
-    assert jni.get_class_name(_env, fld2) == 'java.lang.reflect.Field'
+    assert py2jdbc.jni.get_class_name(_env, fld2) == 'java.lang.reflect.Field'
     field2 = TReflectField(fld2)
     assert field2.getName() == 'MAX_VALUE'
     assert field.hashCode() == field2.hashCode()
@@ -698,7 +698,7 @@ def test_reflect_method():
     method = tclass.getDeclaredMethod('intValue')
     assert method.getName() == 'intValue'
     mid = _env.FromReflectedMethod(method.obj)
-    is_static = jni.jboolean(jni.JNI_FALSE)
+    is_static = py2jdbc.jni.jboolean(py2jdbc.jni.JNI_FALSE)
     mth2 = _env.ToReflectedMethod(integer_cls, mid, is_static)
     method2 = TReflectMethod(mth2)
     assert method2.getName() == 'intValue'
@@ -713,7 +713,7 @@ def test_custom():
     custom_cls = _env.FindClass('Custom')
     # constructors
     cons = _env.GetMethodID(custom_cls, '<init>', '()V')
-    args = jni.jvalue.__mul__(0)()
+    args = py2jdbc.jni.jvalue.__mul__(0)()
     obj = _env.NewObjectA(custom_cls, cons, args)
     # fields
     for code, typ, old, new in FIELDS:
@@ -721,21 +721,21 @@ def test_custom():
         if typ == 'string':
             str_obj = _env.GetObjectField(obj, fid)
             chars = _env.GetStringUTFChars(str_obj, None)
-            assert jni.decode(chars) == old
+            assert py2jdbc.jni.decode(chars) == old
             _env.DeleteLocalRef(str_obj)
             str_obj = _env.NewStringUTF(new)
             _env.SetObjectField(obj, fid, str_obj)
             _env.DeleteLocalRef(str_obj)
             str_obj = _env.GetObjectField(obj, fid)
             chars = _env.GetStringUTFChars(str_obj, None)
-            assert jni.decode(chars) == new
+            assert py2jdbc.jni.decode(chars) == new
             _env.DeleteLocalRef(str_obj)
             str_obj = _env.NewStringUTF(old)
             _env.SetObjectField(obj, fid, str_obj)
             _env.DeleteLocalRef(str_obj)
             str_obj = _env.GetObjectField(obj, fid)
             chars = _env.GetStringUTFChars(str_obj, None)
-            assert jni.decode(chars) == old
+            assert py2jdbc.jni.decode(chars) == old
             _env.DeleteLocalRef(str_obj)
         else:
             if typ == 'char':
@@ -756,21 +756,21 @@ def test_custom():
             str_obj = _env.GetStaticObjectField(custom_cls, fid)
             chars = _env.GetStringUTFChars(str_obj, None)
             _env.DeleteLocalRef(str_obj)
-            assert jni.decode(chars) == old
+            assert py2jdbc.jni.decode(chars) == old
             str_obj = _env.NewStringUTF(new)
             _env.SetStaticObjectField(custom_cls, fid, str_obj)
             _env.DeleteLocalRef(str_obj)
             str_obj = _env.GetStaticObjectField(custom_cls, fid)
             chars = _env.GetStringUTFChars(str_obj, None)
             _env.DeleteLocalRef(str_obj)
-            assert jni.decode(chars) == new
+            assert py2jdbc.jni.decode(chars) == new
             str_obj = _env.NewStringUTF(old)
             _env.SetStaticObjectField(custom_cls, fid, str_obj)
             _env.DeleteLocalRef(str_obj)
             str_obj = _env.GetStaticObjectField(custom_cls, fid)
             chars = _env.GetStringUTFChars(str_obj, None)
             _env.DeleteLocalRef(str_obj)
-            assert jni.decode(chars) == old
+            assert py2jdbc.jni.decode(chars) == old
         else:
             if typ == 'Char':
                 old, new = ord(old), ord(new)
@@ -783,11 +783,11 @@ def test_custom():
             assert getter(custom_cls, fid) == old
 
     # methods
-    args = jni.jvalue.__mul__(0)()
+    args = py2jdbc.jni.jvalue.__mul__(0)()
     mid = _env.GetStaticMethodID(custom_cls, 'staticVoidMethod', '()V')
     _env.CallStaticVoidMethodA(custom_cls, mid, args)
     mid = _env.GetStaticMethodID(custom_cls, 'staticBooleanMethod', '()Z')
-    assert _env.CallStaticBooleanMethodA(custom_cls, mid, args) == jni.JNI_FALSE
+    assert _env.CallStaticBooleanMethodA(custom_cls, mid, args) == py2jdbc.jni.JNI_FALSE
     mid = _env.GetStaticMethodID(custom_cls, 'staticByteMethod', '()B')
     assert _env.CallStaticByteMethodA(custom_cls, mid, args) == 0x32
     mid = _env.GetStaticMethodID(custom_cls, 'staticCharMethod', '()C')
@@ -799,14 +799,17 @@ def test_custom():
     mid = _env.GetStaticMethodID(custom_cls, 'staticLongMethod', '()J')
     assert _env.CallStaticLongMethodA(custom_cls, mid, args) == 0x876543210
     mid = _env.GetStaticMethodID(custom_cls, 'staticFloatMethod', '()F')
-    assert _env.CallStaticFloatMethodA(custom_cls, mid, args) == jni.jfloat(98.6).value
+    assert _env.CallStaticFloatMethodA(custom_cls, mid, args) == py2jdbc.jni.jfloat(98.6).value
     mid = _env.GetStaticMethodID(custom_cls, 'staticDoubleMethod', '()D')
-    assert _env.CallStaticDoubleMethodA(custom_cls, mid, args) == jni.jdouble(777.665544).value
+    assert (
+        _env.CallStaticDoubleMethodA(custom_cls, mid, args) ==
+        py2jdbc.jni.jdouble(777.665544).value
+    )
     mid = _env.GetStaticMethodID(custom_cls, 'staticStringMethod', '()Ljava/lang/String;')
     str_obj = _env.CallStaticObjectMethodA(custom_cls, mid, args)
     chars = _env.GetStringUTFChars(str_obj, None)
     _env.DeleteLocalRef(str_obj)
-    assert jni.decode(chars) == 'hello world'
+    assert py2jdbc.jni.decode(chars) == 'hello world'
     _env.DeleteLocalRef(obj)
     _env.DeleteLocalRef(custom_cls)
 
@@ -814,9 +817,9 @@ def test_custom():
 def test_get_class_name():
     cls = _env.FindClass('java.lang.Integer')
     cons = _env.GetMethodID(cls, '<init>', '(I)V')
-    args = jni.jvalue.__mul__(1)()
+    args = py2jdbc.jni.jvalue.__mul__(1)()
     args[0].i = 0x12345678
     obj = _env.NewObjectA(cls, cons, args)
-    assert jni.get_class_name(_env, obj) == 'java.lang.Integer'
+    assert py2jdbc.jni.get_class_name(_env, obj) == 'java.lang.Integer'
     _env.DeleteLocalRef(obj)
     _env.DeleteLocalRef(cls)
