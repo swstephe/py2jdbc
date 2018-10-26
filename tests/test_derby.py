@@ -1,15 +1,15 @@
 # -*- coding: utf8 -*-
 import datetime
 import os
-from getpass import getuser
 import logging
 
 import six
 import py2jdbc
+from py2jdbc.jni import jfloat
 import pytest
-from tests.config import HAS_MYSQL, MAX_INT
+from tests.config import HAS_DERBY, MAX_INT
 
-if not HAS_MYSQL:
+if not HAS_DERBY:
     if pytest.__version__ < '3.0.0':
         pytest.skip()
     else:
@@ -24,39 +24,34 @@ cu = None
 
 def setup():
     global cx, cu
-    cx = py2jdbc.connect('jdbc:mysql://{}@localhost/py2jdbc'.format(getuser()))
+    cx = py2jdbc.connect('jdbc:derby:py2jdbc_derby;create=true')
     cu = cx.cursor()
-    cu.execute("drop table if exists tests")
+    tables = cx.tables(tables='TESTS')
+    if tables:
+        cu.execute("drop table tests")
     cu.execute("""
     create table tests(
         id integer primary key,
         name varchar(20) not null,
-        bit_field bit,
-        tinyint_field tinyint,
-        boolean_field boolean,
-        smallint_field smallint,
-        mediumint_field mediumint,
-        int_field int,
         bigint_field bigint,
-        decimal_field decimal(10, 5),
-        float_field float(10, 5),
-        double_field double(10, 5),
-        date_field date,
-        datetime_field datetime,
-        timestamp_field timestamp null,
-        time_field time,
-        varchar_field varchar(20) character set utf8,
-        text_field text character set latin1,
-        char_field char(10),
-        longtext_field longtext,
-        nchar_field national char(10),
-        binary_field binary(10),
         blob_field blob,
-        enum_field enum('foo', 'bar', 'baz'),
-        set_field set('one', 'two', 'three')
+        boolean_field boolean,
+        char_field char(10),
+        clob_field clob,
+        date_field date,
+        decimal_field decimal(10, 5),
+        double_field double,
+        float_field float(5),
+        integer_field integer,
+        long_varchar_field long varchar,
+        numeric_field numeric(10, 5),
+        real_field real,
+        smallint_field smallint,
+        time_field time,
+        timestamp_field timestamp,
+        varchar_field varchar(50)
     )""")
     cu.execute("insert into tests(id, name) values (?, ?)", (1, 'setup'))
-    cu.close()
 
 
 def teardown():
@@ -75,85 +70,31 @@ def _test_field(id, typ, value, *desc):
     )
     cu.execute("select id, name, {} from tests where id = ?".format(field), (id,))
     assert cu.description == (
-        ('id', py2jdbc.INTEGER, 11, None, 11, 0, False),
-        ('name', py2jdbc.VARCHAR, 20, None, 20, 0, False),
-        (field, desc[0], desc[1], None, desc[2], desc[3], True),
+        ('ID', py2jdbc.INTEGER, 11, None, 10, 0, False),
+        ('NAME', py2jdbc.VARCHAR, 20, None, 20, 0, False),
+        (field.upper(), desc[0], desc[1], None, desc[2], desc[3], True),
     )
     row = cu.fetchall()
     assert row == ((id, name, value),)
 
 
-def test_bit():
-    _test_field(2, 'bit', 1, py2jdbc.BIT, 1, 1, 0)
+def test_bigint():
+    _test_field(2, 'bigint', 12345678012345, py2jdbc.BIGINT, 20, 19, 0)
 
 
-def test_tinyint():
-    _test_field(3, 'tinyint', 15, py2jdbc.TINYINT, 4, 4, 0)
+def test_blob():
+    _test_field(3, 'blob', os.urandom(1024), py2jdbc.BLOB, MAX_INT, MAX_INT, 0)
 
 
 def test_boolean():
-    _test_field(4, 'boolean', True, py2jdbc.BIT, 1, 1, 0)
-
-
-def test_smallint():
-    _test_field(5, 'smallint', 123, py2jdbc.SMALLINT, 6, 6, 0)
-
-
-def test_mediumint():
-    _test_field(6, 'mediumint', 123456, py2jdbc.INTEGER, 9, 9, 0)
-
-
-def test_int():
-    _test_field(7, 'int', -567890, py2jdbc.INTEGER, 11, 11, 0)
-
-
-def test_bigint():
-    _test_field(8, 'bigint', 12345678012345, py2jdbc.BIGINT, 20, 20, 0)
-
-
-def test_decimal():
-    _test_field(9, 'decimal', 12345.67871, py2jdbc.DECIMAL, 12, 10, 5)
-
-
-def test_float():
-    _test_field(10, 'float', 12345.67871, py2jdbc.REAL, 10, 10, 5)
-
-
-def test_double():
-    _test_field(11, 'double', 12345.67871, py2jdbc.DOUBLE, 10, 10, 5)
-
-
-def test_date():
-    _test_field(12, 'date', datetime.date(2014, 7, 14), py2jdbc.DATE, 10, 10, 0)
-
-
-def test_datetime():
-    _test_field(13, 'datetime', datetime.datetime(2015, 8, 16, 1, 2, 3),
-                py2jdbc.TIMESTAMP, 19, 19, 0)
-
-
-def test_timestamp():
-    _test_field(14, 'timestamp', datetime.datetime(2016, 9, 18, 2, 4, 6),
-                py2jdbc.TIMESTAMP, 19, 19, 0)
-
-
-def test_time():
-    _test_field(15, 'time', datetime.time(18, 15, 4), py2jdbc.TIME, 10, 10, 0)
-
-
-def test_varchar():
-    _test_field(16, 'varchar', 'this is a varchar', py2jdbc.VARCHAR, 20, 20, 0)
-
-
-def test_text():
-    _test_field(17, 'text', 'this is a text field', py2jdbc.LONGVARCHAR, 0xffff, 0xffff, 0)
+    _test_field(4, 'boolean', True, py2jdbc.BOOLEAN, 5, 1, 0)
 
 
 def test_char():
-    _test_field(18, 'char', 'char field', py2jdbc.CHAR, 10, 10, 0)
+    _test_field(5, 'char', 'char field', py2jdbc.CHAR, 10, 10, 0)
 
 
-LONGTEXT = """\
+CLOB = """\
 A moment of happiness,
 you and I sitting on the verandah,
 apparently two, but one in soul, you and I.
@@ -176,29 +117,57 @@ and in another form in a timeless sweet land.
 """
 
 
-def test_longtext():
-    _test_field(19, 'longtext', LONGTEXT, py2jdbc.LONGVARCHAR, MAX_INT, MAX_INT, 0)
+def test_clob():
+    _test_field(6, 'clob', CLOB, py2jdbc.CLOB, MAX_INT, MAX_INT, 0)
 
 
-def test_nchar():
-    _test_field(20, 'nchar', 'some nchar', py2jdbc.CHAR, 10, 10, 0)
+def test_date():
+    _test_field(7, 'date', datetime.date(2014, 7, 14), py2jdbc.DATE, 10, 10, 0)
 
 
-def test_binary():
-    # binary values are padded to column size
-    _test_field(21, 'binary', os.urandom(10), py2jdbc.BINARY, 10, 10, 0)
+def test_decimal():
+    _test_field(8, 'decimal', 12345.67871, py2jdbc.DECIMAL, 12, 10, 5)
 
 
-def test_blob():
-    _test_field(22, 'blob', os.urandom(100), py2jdbc.LONGVARBINARY, 0xffff, 0xffff, 0)
+def test_double():
+    _test_field(9, 'double', 12345.67871, py2jdbc.DOUBLE, 24, 15, 0)
 
 
-def test_enum():
-    _test_field(23, 'enum', 'foo', py2jdbc.CHAR, 3, 3, 0)
+def test_float():
+    _test_field(10, 'float', 12345, py2jdbc.REAL, 15, 7, 0)
 
 
-def test_set():
-    _test_field(24, 'set', 'two', py2jdbc.CHAR, 13, 13, 0)
+def test_integer():
+    _test_field(11, 'integer', -567890, py2jdbc.INTEGER, 11, 10, 0)
+
+
+def test_long_varchar():
+    _test_field(12, 'long_varchar', CLOB, py2jdbc.LONGVARCHAR, 32700, 32700, 0)
+
+
+def test_numeric():
+    _test_field(13, 'numeric', 564.342, py2jdbc.NUMERIC, 12, 10, 5)
+
+
+def test_real():
+    _test_field(14, 'real', jfloat(789.2012).value, py2jdbc.REAL, 15, 7, 0)
+
+
+def test_smallint():
+    _test_field(15, 'smallint', 9831, py2jdbc.SMALLINT, 6, 5, 0)
+
+
+def test_time():
+    _test_field(16, 'time', datetime.time(7, 8, 9), py2jdbc.TIME, 8, 8, 0)
+
+
+def test_timestamp():
+    _now = datetime.datetime.now().replace(microsecond=0)
+    _test_field(17, 'timestamp', _now, py2jdbc.TIMESTAMP, 29, 29, 9)
+
+
+def test_varchar():
+    _test_field(18, 'varchar', 'this is a varchar', py2jdbc.VARCHAR, 50, 50, 0)
 
 
 def test_execute_no_args():
@@ -214,13 +183,14 @@ def test_execute_illegal_sql():
 
 def test_execute_too_much_sql2():
     global cu
-    cu.execute("select 5+4; -- foo bar")
+    cu.execute("select 5+4 from SYSIBM.SYSDUMMY1 -- foo bar")
 
 
 def test_execute_too_much_sql3():
     global cu
     cu.execute("""
-    select 5 + 4;
+    select 5 + 4
+    from SYSIBM.SYSDUMMY1
 
     /*
     foo
@@ -236,9 +206,10 @@ def test_execute_wrong_sql_arg():
 
 def test_execute_arg_string_with_zero_byte():
     global cu
+    _id = 19
     cu.execute("insert into tests(id, name, varchar_field) values (?, ?, ?)",
-               (25, 'with_zero_byte', six.u("Hu\u0000go")))
-    cu.execute("select varchar_field from tests where id = ?", (25,))
+               (_id, 'with_zero_byte', six.u("Hu\u0000go")))
+    cu.execute("select varchar_field from tests where id = ?", (_id, ))
     row = cu.fetchone()
     assert row[0] == six.u("Hu\u0000go")
 
@@ -247,7 +218,7 @@ def test_execute_wrong_no_of_args1():
     global cu
     with pytest.raises(py2jdbc.ProgrammingError):
         cu.execute("insert into tests(id, name) values (?, ?)",
-                   (26, 'wrong_no_of_args1', "Egon"))
+                   (20, 'wrong_no_of_args1', "Egon"))
 
 
 def test_execute_wrong_no_of_args2():
@@ -258,7 +229,7 @@ def test_execute_wrong_no_of_args2():
 
 def test_execute_param_list():
     global cu
-    cu.execute("insert into tests(id, name) values (28, 'param_list')")
+    cu.execute("insert into tests(id, name) values (21, 'param_list')")
     cu.execute("select name from tests where name=?", ['param_list'])
     row = cu.fetchone()
     assert row[0] == 'param_list'
@@ -273,7 +244,7 @@ def test_execute_param_sequence():
             assert x == 0
             return 'param_sequence'
 
-    cu.execute("insert into tests(id, name) values (29, 'param_sequence')")
+    cu.execute("insert into tests(id, name) values (22, 'param_sequence')")
     cu.execute("select name from tests where name=?", L())
     row = cu.fetchone()
     assert row[0] == 'param_sequence'
@@ -363,7 +334,7 @@ def test_fetch_iter():
 def test_fetch_one():
     global cu
     cu.execute("delete from tests")
-    cu.execute("insert into tests(id, name, text_field) values (?, ?, ?)",
+    cu.execute("insert into tests(id, name, varchar_field) values (?, ?, ?)",
                (14, 'test_fetch_one', 'foo'))
     cu.execute("select name from tests")
     row = cu.fetchone()
@@ -417,35 +388,25 @@ def test_description():
     global cu
     cu.execute("select * from tests")
     assert cu.description == (
-        ('id', py2jdbc.INTEGER, 11, None, 11, 0, False),
-        ('name', py2jdbc.VARCHAR, 20, None, 20, 0, False),
-        ('bit_field', py2jdbc.BIT, 1, None, 1, 0, True),
-        ('tinyint_field', py2jdbc.dbi.TINYINT, 4, None, 4, 0, True),
-        ('boolean_field', py2jdbc.BIT, 1, None, 1, 0, True),
-        ('smallint_field', py2jdbc.dbi.SMALLINT, 6, None, 6, 0, True),
-        ('mediumint_field', py2jdbc.dbi.INTEGER, 9, None, 9, 0, True),
-        ('int_field', py2jdbc.dbi.INTEGER, 11, None, 11, 0, True),
-        ('bigint_field', py2jdbc.dbi.BIGINT, 20, None, 20, 0, True),
-        ('decimal_field', py2jdbc.dbi.DECIMAL, 12, None, 10, 5, True),
-        ('float_field', py2jdbc.dbi.REAL, 10, None, 10, 5, True),
-        ('double_field', py2jdbc.dbi.DOUBLE, 10, None, 10, 5, True),
-        ('date_field', py2jdbc.dbi.DATE, 10, None, 10, 0, True),
-        ('datetime_field', py2jdbc.dbi.TIMESTAMP, 19, None, 19, 0, True),
-        ('timestamp_field', py2jdbc.dbi.TIMESTAMP, 19, None, 19, 0, True),
-        ('time_field', py2jdbc.dbi.TIME, 10, None, 10, 0, True),
-        ('varchar_field', py2jdbc.dbi.VARCHAR, 20, None, 20, 0, True),
-        ('text_field', py2jdbc.dbi.LONGVARCHAR, 0xffff, None, 0xffff, 0, True),
-        ('char_field', py2jdbc.dbi.CHAR, 10, None, 10, 0, True),
-        ('longtext_field', py2jdbc.dbi.LONGVARCHAR, MAX_INT, None, MAX_INT, 0, True),
-        ('nchar_field', py2jdbc.dbi.CHAR, 10, None, 10, 0, True),
-        ('binary_field', py2jdbc.dbi.BINARY, 10, None, 10, 0, True),
-        ('blob_field', py2jdbc.dbi.LONGVARBINARY, 0xffff, None, 0xffff, 0, True),
-        ('enum_field', py2jdbc.dbi.CHAR, 3, None, 3, 0, True),
-        ('set_field', py2jdbc.dbi.CHAR, 13, None, 13, 0, True),
-    )
-    cu.execute("select null from tests")
-    assert cu.description == (
-        ('NULL', py2jdbc.NULL, 0, None, 0, 0, True),
+        ('ID', py2jdbc.INTEGER, 11, None, 10, 0, False),
+        ('NAME', py2jdbc.VARCHAR, 20, None, 20, 0, False),
+        ('BIGINT_FIELD', py2jdbc.BIGINT, 20, None, 19, 0, True),
+        ('BLOB_FIELD', py2jdbc.BLOB, MAX_INT, None, MAX_INT, 0, True),
+        ('BOOLEAN_FIELD', py2jdbc.BOOLEAN, 5, None, 1, 0, True),
+        ('CHAR_FIELD', py2jdbc.CHAR, 10, None, 10, 0, True),
+        ('CLOB_FIELD', py2jdbc.CLOB, MAX_INT, None, MAX_INT, 0, True),
+        ('DATE_FIELD', py2jdbc.DATE, 10, None, 10, 0, True),
+        ('DECIMAL_FIELD', py2jdbc.DECIMAL, 12, None, 10, 5, True),
+        ('DOUBLE_FIELD', py2jdbc.DOUBLE, 24, None, 15, 0, True),
+        ('FLOAT_FIELD', py2jdbc.REAL, 15, None, 7, 0, True),
+        ('INTEGER_FIELD', py2jdbc.INTEGER, 11, None, 10, 0, True),
+        ('LONG_VARCHAR_FIELD', py2jdbc.LONGVARCHAR, 32700, None, 32700, 0, True),
+        ('NUMERIC_FIELD', py2jdbc.NUMERIC, 12, None, 10, 5, True),
+        ('REAL_FIELD', py2jdbc.REAL, 15, None, 7, 0, True),
+        ('SMALLINT_FIELD', py2jdbc.SMALLINT, 6, None, 5, 0, True),
+        ('TIME_FIELD', py2jdbc.TIME, 8, None, 8, 0, True),
+        ('TIMESTAMP_FIELD', py2jdbc.TIMESTAMP, 29, None, 29, 9, True),
+        ('VARCHAR_FIELD', py2jdbc.VARCHAR, 50, None, 50, 0, True),
     )
 
 
@@ -460,24 +421,3 @@ def test_fetchall():
 def test_cursor_connection():
     global cx, cu
     assert cu.connection == cx
-
-
-def test_callproc():
-    global cx, cu
-    cu.execute("drop function if exists hello")
-    cu.execute("""\
-    create function hello(s char(20))
-    returns char(50) deterministic
-    return concat('Hello, ', s, '!')
-    """)
-    assert cu.callproc('hello', 'Pickles') == 'Hello, Pickles!'
-    cu.execute("drop procedure if exists count_tests")
-    cu.execute("""\
-    create procedure count_tests(IN pattern VARCHAR(50))
-    begin
-        select count(*) from tests where name like pattern;
-    end
-    """)
-    cu.execute("insert into tests(id, name) values (19, 'test_callproc')")
-    result = cu.callproc('count_tests', 'test_callproc')
-    assert result == ((1,),)

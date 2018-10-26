@@ -451,6 +451,8 @@ class Enumeration(Object):
                 raise StopIteration()
             return self.nextElement()
 
+        __next__ = next
+
     def __init__(self, env):
         super(Enumeration, self).__init__(env)
         self.hasMoreElements = self.method('hasMoreElements', '()Z')

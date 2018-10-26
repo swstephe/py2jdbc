@@ -49,6 +49,14 @@ class Connection(Object):
             cls = self.env.get('java.sql.Statement')
             return cls(self.cls.createStatement(self.obj))
 
+        def getMetaData(self):
+            cls = self.env.get('java.sql.DatabaseMetaData')
+            return cls(self.cls.getMetaData(self.obj))
+
+        def prepareCall(self, sql):
+            cls = self.env.get('java.sql.CallableStatement')
+            return cls(self.cls.prepareCall(self.obj, sql))
+
         def prepareStatement(self, sql):
             cls = self.env.get('java.sql.PreparedStatement')
             return cls(self.cls.prepareStatement(self.obj, sql))
@@ -59,12 +67,428 @@ class Connection(Object):
         self.close = self.method('close', '()V')
         self.commit = self.method('commit', '()V')
         self.getAutoCommit = self.method('getAutoCommit', '()Z')
+        self.getMetaData = self.method('getMetaData', '()Ljava/sql/DatabaseMetaData;')
+        self.prepareCall = self.method(
+            'prepareCall',
+            '(Ljava/lang/String;)Ljava/sql/CallableStatement;'
+        )
         self.prepareStatement = self.method(
             'prepareStatement',
             '(Ljava/lang/String;)Ljava/sql/PreparedStatement;'
         )
         self.rollback = self.method('rollback', '()V')
         self.setAutoCommit = self.method('setAutoCommit', '(Z)V')
+
+
+class DatabaseMetaData(Object):
+    """
+    Wrapper for java.sql.DatabaseMetaData java interface
+    """
+    class_name = 'java.sql.DatabaseMetaData'
+
+    class Instance(Object.Instance):
+        def __init__(self, cls, obj):
+            super(DatabaseMetaData.Instance, self).__init__(cls, obj)
+            if self.cls.ResultSet is None:
+                self.cls.ResultSet = self.env.get('java.sql.ResultSet')
+
+        def getCatalogs(self):
+            return self.cls.ResultSet(self.cls.getCatalogs(self.obj))
+
+        def getFunctionColumns(self, catalog, schema, functions, columns):
+            return self.cls.ResultSet(self.cls.getFunctionColumns(
+                self.obj,
+                catalog,
+                schema,
+                functions,
+                columns
+            ))
+
+        def getFunctions(self, catalog, schemas, functions):
+            return self.cls.ResultSet(self.cls.getFunctions(
+                self.obj,
+                catalog,
+                schemas,
+                functions
+            ))
+
+
+        def getProcedureColumns(self, catalog, schemas, procedures, columns):
+            return self.cls.ResultSet(self.cls.getProcedureColumns(
+                self.obj,
+                catalog,
+                schemas,
+                procedures,
+                columns
+            ))
+
+        def getProcedures(self, catalog, schemas, procedures):
+            return self.cls.ResultSet(self.cls.getProcedures(
+                self.obj,
+                catalog,
+                schemas,
+                procedures
+            ))
+
+        def getSchemas(self, catalog, schemas):
+            return self.cls.ResultSet(self.cls.getSchemas(
+                self.obj,
+                catalog,
+                schemas
+            ))
+
+        def getTables(self, catalog, schemas, tables, types):
+            return self.cls.ResultSet(self.cls.getTables(
+                self.obj,
+                catalog,
+                schemas,
+                tables,
+                types
+            ))
+
+    def __init__(self, env):
+        super(DatabaseMetaData, self).__init__(env)
+        self.ResultSet = None
+        self._attributeNoNulls = self.static_field('attributeNoNulls', 'S')
+        self._attributeNullable = self.static_field('attributeNullable', 'S')
+        self._attributeNullableUnknown = self.static_field('attributeNullableUnknown', 'S')
+        self._bestRowNotPseudo = self.static_field('bestRowNotPseudo', 'I')
+        self._bestRowPseudo = self.static_field('bestRowPseudo', 'I')
+        self._bestRowSession = self.static_field('bestRowSession', 'I')
+        self._bestRowTemporary = self.static_field('bestRowTemporary', 'I')
+        self._bestRowTransaction = self.static_field('bestRowTransaction', 'I')
+        self._bestRowUnknown = self.static_field('bestRowUnknown', 'I')
+        self._columnNoNulls = self.static_field('columnNoNulls', 'I')
+        self._columnNullable = self.static_field('columnNullable', 'I')
+        self._columnNullableUnknown = self.static_field('columnNullableUnknown', 'I')
+        self._functionColumnIn = self.static_field('functionColumnIn', 'I')
+        self._functionColumnInOut = self.static_field('functionColumnInOut', 'I')
+        self._functionColumnOut = self.static_field('functionColumnOut', 'I')
+        self._functionColumnResult = self.static_field('functionColumnResult', 'I')
+        self._functionColumnUnknown = self.static_field('functionColumnUnknown', 'I')
+        self._functionNoNulls = self.static_field('functionNoNulls', 'I')
+        self._functionNoTable = self.static_field('functionNoTable', 'I')
+        self._functionNullable = self.static_field('functionNullable', 'I')
+        self._functionNullableUnknown = self.static_field('functionNullableUnknown', 'I')
+        self._functionResultUnknown = self.static_field('functionResultUnknown', 'I')
+        self._functionReturn = self.static_field('functionReturn', 'I')
+        self._functionReturnsTable = self.static_field('functionReturnsTable', 'I')
+        self._importedKeyCascade = self.static_field('importedKeyCascade', 'I')
+        self._importedKeyInitiallyDeferred = self.static_field(
+            'importedKeyInitiallyDeferred', 'I')
+        self._importedKeyInitiallyImmediate = self.static_field(
+            'importedKeyInitiallyImmediate', 'I')
+        self._importedKeyNoAction = self.static_field('importedKeyNoAction', 'I')
+        self._importedKeyNotDeferrable = self.static_field('importedKeyNotDeferrable', 'I')
+        self._importedKeyRestrict = self.static_field('importedKeyRestrict', 'I')
+        self._importedKeySetDefault = self.static_field('importedKeySetDefault', 'I')
+        self._importedKeySetNull = self.static_field('importedKeySetNull', 'I')
+        self._procedureColumnIn = self.static_field('procedureColumnIn', 'I')
+        self._procedureColumnInOut = self.static_field('procedureColumnInOut', 'I')
+        self._procedureColumnOut = self.static_field('procedureColumnOut', 'I')
+        self._procedureColumnResult = self.static_field('procedureColumnResult', 'I')
+        self._procedureColumnReturn = self.static_field('procedureColumnReturn', 'I')
+        self._procedureColumnUnknown = self.static_field('procedureColumnUnknown', 'I')
+        self._procedureNoNulls = self.static_field('procedureNoNulls', 'I')
+        self._procedureNoResult = self.static_field('procedureNoResult', 'I')
+        self._procedureNullable = self.static_field('procedureNullable', 'I')
+        self._procedureNullableUnknown = self.static_field('procedureNullableUnknown', 'I')
+        self._procedureResultUnknown = self.static_field('procedureResultUnknown', 'I')
+        self._procedureReturnsResult = self.static_field('procedureReturnsResult', 'I')
+        self._sqlStateSQL = self.static_field('sqlStateSQL', 'I')
+        self._sqlStateSQL99 = self.static_field('sqlStateSQL99', 'I')
+        self._sqlStateXOpen = self.static_field('sqlStateXOpen', 'I')
+        self._tableIndexClustered = self.static_field('tableIndexClustered', 'S')
+        self._tableIndexHashed = self.static_field('tableIndexHashed', 'S')
+        self._tableIndexOther = self.static_field('tableIndexOther', 'S')
+        self._tableIndexStatistic = self.static_field('tableIndexStatistic', 'S')
+        self._typeNoNulls = self.static_field('typeNoNulls', 'I')
+        self._typeNullable = self.static_field('typeNullable', 'I')
+        self._typeNullableUnknown = self.static_field('typeNullableUnknown', 'I')
+        self._typePredBasic = self.static_field('typePredBasic', 'I')
+        self._typePredChar = self.static_field('typePredChar', 'I')
+        self._typePredNone = self.static_field('typePredNone', 'I')
+        self._typeSearchable = self.static_field('typeSearchable', 'I')
+        self._versionColumnNotPseudo = self.static_field('versionColumnNotPseudo', 'I')
+        self._versionColumnPseudo = self.static_field('versionColumnPseudo', 'I')
+        self._versionColumnUnknown = self.static_field('versionColumnUnknown', 'I')
+        self.getCatalogs = self.method('getCatalogs', '()Ljava/sql/ResultSet;')
+        self.getFunctionColumns = self.method(
+            'getFunctionColumns', '({0}{0}{0}{0}){1}'.format(
+                'Ljava/lang/String;',
+                'Ljava/sql/ResultSet;'
+            )
+        )
+        self.getFunctions = self.method(
+            'getFunctions', '({0}{0}{0}){1}'.format(
+                'Ljava/lang/String;',
+                'Ljava/sql/ResultSet;'
+            )
+        )
+        self.getProcedureColumns = self.method(
+            'getProcedureColumns', '({0}{0}{0}{0}){1}'.format(
+                'Ljava/lang/String;',
+                'Ljava/sql/ResultSet;'
+            )
+        )
+        self.getProcedures = self.method(
+            'getProcedures', '({0}{0}{0}){1}'.format(
+                'Ljava/lang/String;',
+                'Ljava/sql/ResultSet;'
+            )
+        )
+        self.getSchemas = self.method('getSchemas', '({0}{0}){1}'.format(
+            'Ljava/lang/String;',
+            'Ljava/sql/ResultSet;'
+        ))
+        self.getTables = self.method('getTables', '({0}{0}{0}[{0}){1}'.format(
+            'Ljava/lang/String;',
+            'Ljava/sql/ResultSet;'
+        ))
+
+    @property
+    def attributeNoNulls(self):
+        return self._attributeNoNulls.get(self.cls)
+
+    @property
+    def attributeNullable(self):
+        return self._attributeNullable.get(self.cls)
+
+    @property
+    def attributeNullableUnknown(self):
+        return self._attributeNullableUnknown.get(self.cls)
+
+    @property
+    def bestRowNotPseudo(self):
+        return self._bestRowNotPseudo.get(self.cls)
+
+    @property
+    def bestRowPseudo(self):
+        return self._bestRowPseudo.get(self.cls)
+
+    @property
+    def bestRowSession(self):
+        return self._bestRowSession.get(self.cls)
+
+    @property
+    def bestRowTemporary(self):
+        return self._bestRowTemporary.get(self.cls)
+
+    @property
+    def bestRowTransaction(self):
+        return self._bestRowTransaction.get(self.cls)
+
+    @property
+    def bestRowUnknown(self):
+        return self._bestRowUnknown.get(self.cls)
+
+    @property
+    def columnNoNulls(self):
+        return self._columnNoNulls.get(self.cls)
+
+    @property
+    def columnNullable(self):
+        return self._columnNullable.get(self.cls)
+
+    @property
+    def columnNullableUnknown(self):
+        return self._columnNullableUnknown.get(self.cls)
+
+    @property
+    def functionColumnIn(self):
+        return self._functionColumnIn.get(self.cls)
+
+    @property
+    def functionColumnInOut(self):
+        return self._functionColumnInOut.get(self.cls)
+
+    @property
+    def functionColumnOut(self):
+        return self._functionColumnOut.get(self.cls)
+
+    @property
+    def functionColumnResult(self):
+        return self._functionColumnResult.get(self.cls)
+
+    @property
+    def functionColumnUnknown(self):
+        return self._functionColumnUnknown.get(self.cls)
+
+    @property
+    def functionNoNulls(self):
+        return self._functionNoNulls.get(self.cls)
+
+    @property
+    def functionNoTable(self):
+        return self._functionNoTable.get(self.cls)
+
+    @property
+    def functionNullable(self):
+        return self._functionNullable.get(self.cls)
+
+    @property
+    def functionNullableUnknown(self):
+        return self._functionNullableUnknown.get(self.cls)
+
+    @property
+    def functionResultUnknown(self):
+        return self._functionResultUnknown.get(self.cls)
+
+    @property
+    def functionReturn(self):
+        return self._functionReturn.get(self.cls)
+
+    @property
+    def functionReturnsTable(self):
+        return self._functionReturnsTable.get(self.cls)
+
+    @property
+    def importedKeyCascade(self):
+        return self._importedKeyCascade.get(self.cls)
+
+    @property
+    def importedKeyInitiallyDeferred(self):
+        return self._importedKeyInitiallyDeferred.get(self.cls)
+
+    @property
+    def importedKeyInitiallyImmediate(self):
+        return self._importedKeyInitiallyImmediate.get(self.cls)
+
+    @property
+    def importedKeyNoAction(self):
+        return self._importedKeyNoAction.get(self.cls)
+
+    @property
+    def importedKeyNotDeferrable(self):
+        return self._importedKeyNotDeferrable.get(self.cls)
+
+    @property
+    def importedKeyRestrict(self):
+        return self._importedKeyRestrict.get(self.cls)
+
+    @property
+    def importedKeySetDefault(self):
+        return self._importedKeySetDefault.get(self.cls)
+
+    @property
+    def importedKeySetNull(self):
+        return self._importedKeySetNull.get(self.cls)
+
+    @property
+    def procedureColumnIn(self):
+        return self._procedureColumnIn.get(self.cls)
+
+    @property
+    def procedureColumnInOut(self):
+        return self._procedureColumnInOut.get(self.cls)
+
+    @property
+    def procedureColumnOut(self):
+        return self._procedureColumnOut.get(self.cls)
+
+    @property
+    def procedureColumnResult(self):
+        return self._procedureColumnResult.get(self.cls)
+
+    @property
+    def procedureColumnReturn(self):
+        return self._procedureColumnReturn.get(self.cls)
+
+    @property
+    def procedureColumnUnknown(self):
+        return self._procedureColumnUnknown.get(self.cls)
+
+    @property
+    def procedureNoNulls(self):
+        return self._procedureNoNulls.get(self.cls)
+
+    @property
+    def procedureNoResult(self):
+        return self._procedureNoResult.get(self.cls)
+
+    @property
+    def procedureNullable(self):
+        return self._procedureNullable.get(self.cls)
+
+    @property
+    def procedureNullableUnknown(self):
+        return self._procedureNullableUnknown.get(self.cls)
+
+    @property
+    def procedureResultUnknown(self):
+        return self._procedureResultUnknown.get(self.cls)
+
+    @property
+    def procedureReturnsResult(self):
+        return self._procedureReturnsResult.get(self.cls)
+
+    @property
+    def sqlStateSQL(self):
+        return self._sqlStateSQL.get(self.cls)
+
+    @property
+    def sqlStateSQL99(self):
+        return self._sqlStateSQL99.get(self.cls)
+
+    @property
+    def sqlStateXOpen(self):
+        return self._sqlStateXOpen.get(self.cls)
+
+    @property
+    def tableIndexClustered(self):
+        return self._tableIndexClustered.get(self.cls)
+
+    @property
+    def tableIndexHashed(self):
+        return self._tableIndexHashed.get(self.cls)
+
+    @property
+    def tableIndexOther(self):
+        return self._tableIndexOther.get(self.cls)
+
+    @property
+    def tableIndexStatistic(self):
+        return self._tableIndexStatistic.get(self.cls)
+
+    @property
+    def typeNoNulls(self):
+        return self._typeNoNulls.get(self.cls)
+
+    @property
+    def typeNullable(self):
+        return self._typeNullable.get(self.cls)
+
+    @property
+    def typeNullableUnknown(self):
+        return self._typeNullableUnknown.get(self.cls)
+
+    @property
+    def typePredBasic(self):
+        return self._typePredBasic.get(self.cls)
+
+    @property
+    def typePredChar(self):
+        return self._typePredChar.get(self.cls)
+
+    @property
+    def typePredNone(self):
+        return self._typePredNone.get(self.cls)
+
+    @property
+    def typeSearchable(self):
+        return self._typeSearchable.get(self.cls)
+
+    @property
+    def versionColumnNotPseudo(self):
+        return self._versionColumnNotPseudo.get(self.cls)
+
+    @property
+    def versionColumnPseudo(self):
+        return self._versionColumnPseudo.get(self.cls)
+
+    @property
+    def versionColumnUnknown(self):
+        return self._versionColumnUnknown.get(self.cls)
 
 
 class DriverManager(Object):
@@ -109,7 +533,7 @@ class DriverManager(Object):
 
         :return: a generator that produces a list of JDBC drivers
         """
-        enumeration = self.env.get('java.lang.Enumeration')
+        enumeration = self.env.get('java.util.Enumeration')
         driver = self.env.get('java.sql.Driver')
         return (driver(obj) for obj in enumeration(self._getDrivers()))
 
@@ -329,6 +753,106 @@ class PreparedStatement(Object):
         self.TypesNull = None
 
 
+
+
+class CallableStatement(PreparedStatement):
+    """
+    Wrapper for java.sql.CallableStatement java interface
+    """
+    class_name = 'java.sql.CallableStatement'
+
+    class Instance(PreparedStatement.Instance):
+        """
+        Wrapper for java.sql.CallableStatement object instance
+        """
+        def __init__(self, cls, obj):
+            super(CallableStatement.Instance, self).__init__(cls, obj)
+            self.getBoolean = lambda i, o=obj: cls.getBoolean(o, i)
+            self.getBytes = lambda i, o=obj: cls.getBytes(o, i)
+            self.getDouble = lambda i, o=obj: cls.getDouble(o, i)
+            self.getFloat = lambda i, o=obj: cls.getFloat(o, i)
+            self.getInt = lambda i, o=obj: cls.getInt(o, i)
+            self.getLong = lambda i, o=obj: cls.getLong(o, i)
+            self.getString = lambda i, o=obj: cls.getString(o, i)
+            self.registerOutParameter = lambda i, t, o=obj: cls.registerOutParameter(o, i, t)
+            self.setBoolean = lambda n, v, o=obj: cls.setBoolean(o, n, v)
+            self.setBytes = lambda n, v, o=obj: cls.setBytes(o, n, v)
+            self.setDate = lambda n, v, o=obj: cls.setDate(o, n, v)
+            self.setDouble = lambda n, v, o=obj: cls.setDouble(o, n, v)
+            self.setLong = lambda n, v, o=obj: cls.setLong(o, n, v)
+            self.setNull = lambda n, t, o=obj: cls.setNull(o, n, t)
+            self.setString = lambda n, v, o=obj: cls.setString(o, n, v)
+            self.setTime = lambda n, v, o=obj: cls.setTime(o, n, v)
+            self.setTimestamp = lambda n, v, o=obj: cls.setTimestamp(o, n, v)
+            self.wasNull = lambda o=obj: cls.wasNull(o)
+
+        def getDate(self, i):
+            cls = self.env.get('java.sql.Date')
+            return cls(self.cls.getDate(self.obj, i))
+
+        def getMetaData(self):
+            cls = self.env.get('java.sql.ResultSetMetaData')
+            return cls(self.cls.getMetaData(self.obj))
+
+        def getTime(self, i):
+            cls = self.env.get('java.sql.Time')
+            return cls(self.cls.getTime(self.obj, i))
+
+        def getTimestamp(self, i):
+            cls = self.env.get('java.sql.Timestamp')
+            return cls(self.cls.getTimestamp(self.obj, i))
+
+        def set(self, name, arg):
+            if arg is None:
+                self.setNull(name, self.cls.TypesNull)
+            elif isinstance(arg, bool):
+                self.setBoolean(name, arg)
+            elif isinstance(arg, int):
+                self.setLong(name, arg)
+            elif isinstance(arg, float):
+                self.setDouble(name, arg)
+            elif isinstance(arg, six.string_types):
+                self.setString(name, arg)
+            elif isinstance(arg, six.binary_type):
+                self.setBytes(name, arg)
+            elif isinstance(arg, datetime.datetime):
+                self.setTimestamp(name, arg)
+            elif isinstance(arg, datetime.date):
+                self.setDate(name, arg)
+            elif isinstance(arg, datetime.time):
+                self.setTime(name, arg)
+            else:
+                raise RuntimeError("can't set parameter %r to python value %r(%r)", name, arg, type(arg))
+
+
+    def __init__(self, env):
+        super(CallableStatement, self).__init__(env)
+        self.getBoolean = self.method('getBoolean', '(I)Z')
+        self.getBytes = self.method('getBytes', '(I)[B')
+        self.getDate = self.method('getDate', '(I)Ljava/sql/Date;')
+        self.getDouble = self.method('getDouble', '(I)D')
+        self.getFloat = self.method('getFloat', '(I)F')
+        self.getInt = self.method('getInt', '(I)I')
+        self.getLong = self.method('getLong', '(I)J')
+        self.getString = self.method('getString', '(I)Ljava/lang/String;')
+        self.getTime = self.method('getTime', '(I)Ljava/sql/Time;')
+        self.getTimestamp = self.method('getTimestamp', '(I)Ljava/sql/Timestamp;')
+        self.registerOutParameter = self.method('registerOutParameter', '(II)V')
+        self.setBoolean = self.method('setBoolean', '(Ljava/lang/String;Z)V')
+        self.setBytes = self.method('setBytes', '(Ljava/lang/String;[B)V')
+        self.setDate = self.method('setDate', '(Ljava/lang/String;Ljava/sql/Date;)V')
+        self.setDouble = self.method('setDouble', '(Ljava/lang/String;D)V')
+        self.setLong = self.method('setLong', '(Ljava/lang/String;J)V')
+        self.setNull = self.method('setNull', '(Ljava/lang/String;I)V')
+        self.setString = self.method('setString', '(Ljava/lang/String;Ljava/lang/String;)V')
+        self.setTime = self.method('setTime', '(Ljava/lang/String;Ljava/sql/Time;)V')
+        self.setTimestamp = self.method(
+            'setTimestamp',
+            '(Ljava/lang/String;Ljava/sql/Timestamp;)V'
+        )
+        self.wasNull = self.method('wasNull', '()Z')
+
+
 class ResultSet(Object):
     """
     Wrapper for java.sql.ResultSet java class
@@ -344,6 +868,7 @@ class ResultSet(Object):
         def __init__(self, cls, obj):
             super(ResultSet.Instance, self).__init__(cls, obj)
             self.close = lambda o=obj: cls.close(o)
+            self.getBoolean = lambda i, o=obj: cls.getBoolean(o, i)
             self.getBytes = lambda i, o=obj: cls.getBytes(o, i)
             self.getDouble = lambda i, o=obj: cls.getDouble(o, i)
             self.getInt = lambda i, o=obj: cls.getInt(o, i)
@@ -385,6 +910,7 @@ class ResultSet(Object):
     def __init__(self, env):
         super(ResultSet, self).__init__(env)
         self.close = self.method('close', '()V')
+        self.getBoolean = self.method('getBoolean', '(I)Z')
         self.getBytes = self.method('getBytes', '(I)[B')
         self.getDate = self.method('getDate', '(I)Ljava/sql/Date;')
         self.getDouble = self.method('getDouble', '(I)D')

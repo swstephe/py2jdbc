@@ -59,10 +59,18 @@ STATIC_FIELDS = (
 CWD = os.path.dirname(os.path.realpath(__file__))
 LIB = os.path.join(CWD, 'lib')
 SRC = os.path.join(CWD, 'src')
-CLASSPATH = CP_SEP.join([
+CLASSPATH = [
     os.path.join(SRC),
-    os.path.join(LIB, 'sqlite-jdbc-3.23.1.jar'),
-    os.path.join(LIB, 'mysql-connector-java-8.0.12.jar'),
-])
+    os.path.join(LIB, 'sqlite-jdbc-3.23.1.jar')
+]
+path = os.path.join(LIB, 'mysql-connector-java-8.0.12.jar')
+HAS_MYSQL = os.path.exists(path)
+if os.path.exists(path):
+    CLASSPATH.append(path)
+path = os.path.join(LIB, 'derby.jar')
+HAS_DERBY = os.path.exists(path)
+if HAS_DERBY:
+    CLASSPATH.append(path)
+CLASSPATH = CP_SEP.join(CLASSPATH)
 DRIVER = 'org.sqlite.JDBC'
 JAVA_OPTS = dict(classpath=CLASSPATH, verbose=('memory', 'gc'), check='jni')

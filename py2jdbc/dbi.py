@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 import six
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 import time
 
 from py2jdbc.wrap import get_env
@@ -57,6 +57,7 @@ class DataType(object):
         raise NotImplementedError("DataType.get")
 
 
+
 @datatypes.register
 class ARRAY(DataType):
     type_code = 2003
@@ -80,6 +81,7 @@ class BINARY(DataType):
         return None if rs.wasNull() else value
 
 
+
 @datatypes.register
 class BIT(DataType):
     type_code = -7
@@ -92,6 +94,10 @@ class BIT(DataType):
 @datatypes.register
 class BLOB(DataType):
     type_code = 2004
+
+    def get(self, rs, i):
+        value = rs.getBytes(i)
+        return None if rs.wasNull() else value
 
 
 @datatypes.register
@@ -115,6 +121,10 @@ class CHAR(DataType):
 @datatypes.register
 class CLOB(DataType):
     type_code = 2005
+
+    def get(self, rs, i):
+        value = rs.getString(i)
+        return None if rs.wasNull() else value
 
 
 @datatypes.register
@@ -231,7 +241,7 @@ class NUMERIC(DataType):
     type_code = 2
 
     def get(self, rs, i):
-        value = rs.getDouble()
+        value = rs.getDouble(i)
         return None if rs.wasNull() else value
 
 
@@ -343,6 +353,31 @@ class VARCHAR(DataType):
         return None if rs.wasNull() else value
 
 
+def _fetch_funcs(rs):
+    meta = rs.getMetaData()
+    try:
+        count = meta.getColumnCount()
+    except LangException.Instance:
+        return
+    errors = []
+    for i in range(count):
+        dt = datatypes[meta.getColumnType(i + 1)]
+        if dt is None:
+            errors.append("unsupported datatype %r (%d) for column %r" % (
+                meta.getColumnTypeName(i + 1),
+                meta.getColumnType(i + 1),
+                meta.getColumnName(i + 1)
+            ))
+        yield dt()
+    if errors:
+        raise DataError('\n'.join(errors))
+
+
+def _fetch_row(rs, funcs):
+    for i, fn in enumerate(funcs):
+        yield fn.get(rs, i + 1)
+
+
 class Cursor(object):
     """
     The DBI Cursor object.  It allows you to execute SQL statements and manage
@@ -370,29 +405,6 @@ class Cursor(object):
         raise StopIteration()
 
     next = __next__
-
-    def _fetch_funcs(self):
-        meta = self._rs.getMetaData()
-        try:
-            count = meta.getColumnCount()
-        except LangException.Instance:
-            return
-        errors = []
-        for i in range(count):
-            dt = datatypes[meta.getColumnType(i + 1)]
-            if dt is None:
-                errors.append("unsupported datatype %r (%d) for column %r" % (
-                    meta.getColumnTypeName(i + 1),
-                    meta.getColumnType(i + 1),
-                    meta.getColumnName(i + 1)
-                ))
-            yield dt()
-        if errors:
-            raise DataError('\n'.join(errors))
-
-    def _fetch_row(self, funcs):
-        for i, fn in enumerate(funcs):
-            yield fn.get(self._rs, i + 1)
 
     @property
     def connection(self):
@@ -452,9 +464,64 @@ class Cursor(object):
         :param args: the sequence of arguments to pass to the procedure
         :return: the return value of the procedure
         """
-        if self._rs is None:
-            raise InterfaceError("not open")
-        return self._rs.callproc(procname, *args)
+        env = get_env()
+        meta = env.get('java.sql.DatabaseMetaData')
+        Types = env.get('java.sql.Types')
+        for func in self._conn.functions(functions=procname):
+            name = func.function_name
+            if func.function_schem:
+                name = func.function_schem + '.' + name
+            cols = self._conn.function_columns(functions=func.function_name, schemas=func.function_schem)
+            params = tuple(col for col in cols if col.column_type != meta.functionReturn)
+            returns = any(col.column_type == meta.functionReturn for col in cols)
+            break
+        else:
+            for proc in self._conn.procedures(procedures=procname):
+                name = proc.procedure_name
+                if proc.procedure_schem:
+                    name = proc.procedure_schem + '.' + name
+                cols = self._conn.procedure_columns(schemas=proc.procedure_schem, procedures=proc.procedure_name)
+                params = tuple(cols)
+                returns = False
+                break
+            else:
+                raise RuntimeError("function not found %r" % procname)
+        sql = 'call {}({})'.format(name, ', '.join('?' for _ in range(len(params))))
+        if returns:
+            sql = '?= ' + sql
+        stmt = self._conn.conn.prepareCall('{ %s }' % sql)
+        j = 0
+        for i, col in enumerate(cols):
+            if col.column_type in (meta.functionColumnIn, meta.functionColumnInOut):
+                stmt.set(col.column_name, args[j])
+                j += 1
+            elif col.column_type in (
+                meta.functionColumnInOut,
+                meta.functionColumnOut,
+                meta.functionReturn,
+            ):
+                stmt.registerOutParameter(col.ordinal_position + 1, col.data_type)
+        check = stmt.execute()
+        if check:
+            rs2 = stmt.getResultSet()
+            funcs = tuple(_fetch_funcs(rs2))
+            return tuple(
+                tuple(_fetch_row(rs2, funcs))
+                for _ in rs2
+            )
+
+        results = []
+        for i, col in enumerate(cols):
+            if col.column_type in (meta.functionColumnOut, meta.functionReturn):
+                dt = datatypes[col.data_type]()
+                value = dt.get(stmt, col.ordinal_position + 1)
+                results.append(value)
+        if len(results) == 0:
+            return None
+        elif len(results) == 1:
+            return results[0]
+        return results
+
 
     def close(self):
         """
@@ -535,9 +602,9 @@ class Cursor(object):
         sequences.  An empty sequence is returned when no more rows are available.
         :return: a sequence of sequences or empty sequence.
         """
-        funcs = tuple(self._fetch_funcs())
+        funcs = tuple(_fetch_funcs(self._rs))
         return tuple(
-            tuple(self._fetch_row(funcs))
+            tuple(_fetch_row(self._rs, funcs))
             for row in self._rs
         )
 
@@ -549,14 +616,14 @@ class Cursor(object):
         :param size: the number of rows to fetch, or arraysize if not specified.
         :return: a sequence of sequences or empty sequence.
         """
-        funcs = tuple(self._fetch_funcs())
+        funcs = tuple(_fetch_funcs(self._rs))
         rows = []
         for i in range(size or self.arraysize):
             try:
                 six.next(self._rs)
             except StopIteration:
                 break
-            rows.append(tuple(self._fetch_row(funcs)))
+            rows.append(tuple(_fetch_row(self._rs, funcs)))
         return tuple(rows)
 
     def fetchone(self):
@@ -571,8 +638,8 @@ class Cursor(object):
             self._rs.next()
         except StopIteration:
             return
-        funcs = tuple(self._fetch_funcs())
-        return tuple(self._fetch_row(funcs))
+        funcs = tuple(_fetch_funcs(self._rs))
+        return tuple(_fetch_row(self._rs, funcs))
 
     def setinputsizes(self, sizes):
         """
@@ -597,6 +664,87 @@ class Cursor(object):
         :param column: the column index to apply this size
         """
         pass
+
+
+Function = namedtuple('Function', (
+    'function_cat',
+    'function_schem',
+    'function_name',
+    'remarks',
+    'function_type',
+    'specific_name'
+))
+
+FunctionColumns = namedtuple('FunctionColumn', (
+    'function_cat',
+    'function_schem',
+    'function_name',
+    'column_name',
+    'column_type',
+    'data_type',
+    'type_name',
+    'precision',
+    'length',
+    'scale',
+    'radix',
+    'nullable',
+    'remarks',
+    'char_octet_length',
+    'ordinal_position',
+    'is_nullable',
+    'specific_name'
+))
+
+Procedure = namedtuple('Procedure', (
+    'procedure_cat',
+    'procedure_schem',
+    'procedure_name',
+    'remarks',
+    'procedure_type',
+    'specific_name'
+))
+
+ProcedureColumn = namedtuple('ProcedureColumn', (
+    'procedure_cat',
+    'procedure_schem',
+    'procedure_name',
+    'column_name',
+    'column_type',
+    'data_type',
+    'type_name',
+    'precision',
+    'length',
+    'scale',
+    'radix',
+    'nullable',
+    'remarks',
+    'column_def',
+    'sql_data_type',
+    'sql_datetime_sub',
+    'char_octet_length',
+    'ordinal_position',
+    'is_nullable',
+    'specific_name'
+))
+
+
+Schema = namedtuple('Schema', (
+    'table_schem',
+    'table_catalog'
+))
+
+Table = namedtuple('Table', (
+    'table_cat',
+    'table_schem',
+    'table_name',
+    'table_type',
+    'remarks',
+    'type_cat',
+    'type_schem',
+    'type_name',
+    'self_referencing_col_name',
+    'ref_generation'
+))
 
 
 class Connection(object):
@@ -646,6 +794,11 @@ class Connection(object):
         self.conn.setAutoCommit(value)
         self._autocommit = value
 
+    @property
+    def catalogs(self):
+        rs = self.conn.getMetaData().getCatalogs()
+        return tuple(rs.getString(1) for _ in rs)   # table_cat
+
     def close(self):
         """
         Close the connection now.
@@ -671,6 +824,46 @@ class Connection(object):
         self.is_connected()
         return Cursor(self)
 
+    def function_columns(self, catalog=None, schemas=None, functions=None, columns=None):
+        meta = self.conn.getMetaData()
+        rs = meta.getFunctionColumns(catalog, schemas, functions, columns)
+        return tuple(
+            FunctionColumns(
+                function_cat=rs.getString(1),    # FUNCTION_CAT
+                function_schem=rs.getString(2),    # FUNCTION_SCHEM
+                function_name=rs.getString(3),    # FUNCTION_NAME
+                column_name=rs.getString(4),    # COLUMN_NAME
+                column_type=rs.getInt(5),       # COLUMN_TYPE
+                data_type=rs.getInt(6),       # DATA_TYPE
+                type_name=rs.getString(7),    # TYPE_NAME
+                precision=rs.getInt(8),       # PRECISION
+                length=rs.getInt(9),       # LENGTH
+                scale=rs.getInt(10),      # SCALE
+                radix=rs.getInt(11),      # RADIX
+                nullable=rs.getInt(12),      # NULLABLE
+                remarks=rs.getString(13),   # REMARKS
+                char_octet_length=rs.getInt(14),      # CHAR_OCTET_LENGTH
+                ordinal_position=rs.getInt(15),      # ORDINAL_POSITION
+                is_nullable=rs.getString(16),   # IS_NULLABLE
+                specific_name=rs.getString(17),   # SPECIFIC_NAME
+            )
+            for _ in rs
+        )
+
+    def functions(self, catalog=None, schemas=None, functions=None):
+        rs = self.conn.getMetaData().getFunctions(catalog, schemas, functions)
+        return tuple(
+            Function(
+                function_cat=rs.getString(1),
+                function_schem=rs.getString(2),
+                function_name=rs.getString(3),
+                remarks=rs.getString(4),
+                function_type=rs.getInt(5),
+                specific_name=rs.getString(6)
+            )
+            for _ in rs
+        )
+
     def open(self, *args, **kwargs):
         """
         Opens the connection to the database.
@@ -689,6 +882,49 @@ class Connection(object):
         self._autocommit = self.conn.getAutoCommit()
         return self
 
+    def procedure_columns(self, catalog=None, schemas=None, procedures=None, columns=None):
+        meta = self.conn.getMetaData()
+        rs = meta.getProcedureColumns(catalog, schemas, procedures, columns)
+        return tuple(
+            ProcedureColumn(
+                procedure_cat=rs.getString(1),
+                procedure_schem=rs.getString(2),
+                procedure_name=rs.getString(3),
+                column_name=rs.getString(4),
+                column_type=rs.getInt(5),
+                data_type=rs.getInt(6),
+                type_name=rs.getString(7),
+                precision=rs.getInt(8),
+                length=rs.getInt(9),
+                scale=rs.getInt(10),
+                radix=rs.getInt(11),
+                nullable=rs.getInt(12),
+                remarks=rs.getString(13),
+                column_def=rs.getString(14),
+                sql_data_type=rs.getInt(15),
+                sql_datetime_sub=rs.getInt(16),
+                char_octet_length=rs.getInt(17),
+                ordinal_position=rs.getInt(18),
+                is_nullable=rs.getString(19),
+                specific_name=rs.getString(20)
+            )
+            for _ in rs
+        )
+
+    def procedures(self, catalog=None, schemas=None, procedures=None):
+        rs = self.conn.getMetaData().getProcedures(catalog, schemas, procedures)
+        return tuple(
+            Procedure(
+                procedure_cat=rs.getString(1),
+                procedure_schem=rs.getString(2),
+                procedure_name=rs.getString(3),
+                remarks=rs.getString(7),
+                procedure_type=rs.getInt(8),
+                specific_name=rs.getString(9)
+            )
+            for _ in rs
+        )
+
     def rollback(self):
         """
         Roll back any pending transactions, if driver supports it.
@@ -697,6 +933,35 @@ class Connection(object):
         self.is_connected()
         if not self._autocommit:
             self.conn.rollback()
+
+    def schemas(self, catalog=None, schemas=None):
+        rs = self.conn.getMetaData().getSchemas(catalog, schemas)
+        return tuple(
+            Schema(
+                table_schem=rs.getString(1),
+                table_catalog=rs.getString(2)
+            )
+            for _ in rs
+        )
+
+    def tables(self, catalog=None, schemas=None, tables=None, types=None):
+        rs = self.conn.getMetaData().getTables(catalog, schemas, tables, types)
+        return tuple(
+            Table(
+                table_cat=rs.getString(1),
+                table_schem=rs.getString(2),
+                table_name=rs.getString(3),
+                table_type=rs.getString(4),
+                remarks=rs.getString(5),
+                type_cat=rs.getString(6),
+                type_schem=rs.getString(7),
+                type_name=rs.getString(8),
+                self_referencing_col_name=rs.getString(9),
+                ref_generation=rs.getString(10)
+            )
+            for _ in rs
+        )
+
 
 
 def connect(*args, **kwargs):

@@ -394,6 +394,8 @@ class JSigObject(JSigScalar):
         :param value: a Java object instance
         :return: a Java string or object instance.
         """
+        if self.env.IsSameObject(value, None):
+            return None
         if self.classname == 'java/lang/String':
             chars = self.env.GetStringUTFChars(value)
             self.env.DeleteLocalRef(value)
@@ -411,8 +413,9 @@ class JSigObject(JSigScalar):
         :return: a java object
         """
         if self.classname == 'java/lang/String':
-            value = self.env.NewStringUTF(value)
-            self._release = True
+            if value is not None:
+                value = self.env.NewStringUTF(value)
+                self._release = True
             return value
         return super(JSigObject, self).py2j(value)
 
@@ -805,6 +808,8 @@ class JSigObjectArray(JSig):
         :param value: a Python sequence of values
         :return: a Java objectArray
         """
+        if value is None:
+            return None
         _len = len(value)
         result = self.env.NewObjectArray(_len, self.cls, None)
         for i, v in enumerate(value):
