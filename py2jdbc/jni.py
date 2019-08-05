@@ -2,6 +2,7 @@
 import atexit
 import codecs
 import logging
+import os
 import signal
 import six
 
@@ -2762,4 +2763,7 @@ def signal_handler(sig, frame):
     raise RuntimeError("encountered signal")
 
 
-signal.signal(signal.SIGHUP, signal_handler)
+if os.name == 'nt':
+    signal.signal(signal.SIGBREAK, signal_handler)
+else:
+    signal.signal(signal.SIGHUP, signal_handler)

@@ -8,6 +8,8 @@ NAME = 'mutf8'      # not cesu-8, which uses a different zero-byte
 
 
 def mutf8_unichr(value):
+    if value >= 0x100000:
+        raise ValueError('mutf8_unichr() arg not in range(0x10000)')
     return chr(value) if six.PY3 else six.u('\\U%08x' % value)
 
 

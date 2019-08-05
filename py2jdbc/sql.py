@@ -684,7 +684,7 @@ class PreparedStatement(Object):
                 self.setNull(i, self.cls.TypesNull)
             elif isinstance(arg, bool):
                 self.setBoolean(i, arg)
-            elif isinstance(arg, int):
+            elif isinstance(arg, int) or type(arg).__name__ == 'long':
                 self.setLong(i, arg)
             elif isinstance(arg, float):
                 self.setDouble(i, arg)
@@ -692,11 +692,13 @@ class PreparedStatement(Object):
                 self.setString(i, arg)
             elif isinstance(arg, six.binary_type):
                 self.setBytes(i, arg)
-            elif isinstance(arg, datetime.datetime):
+            elif hasattr(arg, '__getitem__') and isinstance(arg[0], int):
+                self.setBytes(i, arg)
+            elif isinstance(arg, (datetime.datetime, self.cls.Timestamp.Instance)):
                 self.setTimestamp(i, arg)
-            elif isinstance(arg, datetime.date):
+            elif isinstance(arg, (datetime.date, self.cls.Date.Instance)):
                 self.setDate(i, arg)
-            elif isinstance(arg, datetime.time):
+            elif isinstance(arg, (datetime.time, self.cls.Time.Instance)):
                 self.setTime(i, arg)
             else:
                 raise RuntimeError("can't bind to python value %r(%r)", arg, type(arg))
@@ -1123,11 +1125,12 @@ class Timestamp(Date):
 
     def new(self, *args):
         if len(args) == 1:
-            if isinstance(args[0], int):
+            if isinstance(args[0], int) or type(args[0]).__name__ == 'long':
                 return self.cons_j(int(args[0]))
         return super(Timestamp, self).new(*args)
 
     def from_python(self, value):
+        print('from_python', type(value))
         if isinstance(value, datetime.datetime):
             cal = self.Calendar.getInstance()
             cal.set(self.cal.YEAR, value.year)

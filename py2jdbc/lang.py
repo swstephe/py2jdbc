@@ -226,6 +226,9 @@ class Boolean(Object):
         def __bool__(self):
             return self.booleanValue() == JNI_TRUE
 
+        __nonzero__ = __bool__      # Python 2 compatibility
+
+
     def __init__(self, env):
         super(Boolean, self).__init__(env)
         self._FALSE = self.static_field('FALSE', 'Ljava/lang/Boolean;')

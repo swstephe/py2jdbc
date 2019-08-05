@@ -624,6 +624,8 @@ class JSigByteArray(JSigArray):
         :param value: a Python byte string
         :return: a Java byteArray
         """
+        if six.PY3 and isinstance(value, str):
+            value = map(ord, value)
         _len = len(value)
         result = self._fn_new(_len)
         _values = self.jtype.__mul__(_len)(*value)
