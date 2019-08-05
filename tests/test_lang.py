@@ -5,6 +5,7 @@ import pytest
 from py2jdbc.jni import jdouble, jobject
 from py2jdbc.wrap import get_env
 from py2jdbc.lang import (
+    Boolean,
     Object,
     LangException
 )
@@ -49,9 +50,14 @@ def test_boolean():
     obj1 = cls.new('true')
     obj2 = cls.new(True)
     obj3 = cls.new(False)
+    assert isinstance(obj1, Boolean.Instance)
+    assert obj1.booleanValue() == True
+    assert isinstance(obj2, Boolean.Instance)
+    assert obj2.booleanValue() == True
+    assert isinstance(obj3, Boolean.Instance)
+    assert obj3.booleanValue() == False
     assert obj1 == obj2
     assert obj1 != obj3
-    assert bool(obj1) is True
     assert obj1
     assert not obj3
     del obj3
@@ -59,6 +65,7 @@ def test_boolean():
     del obj1
 
 
+# noinspection PyCompatibility
 def test_char():
     cls = _env.get('java.lang.Character')
     assert cls.MAX_VALUE == six.unichr(MAX_CHAR)

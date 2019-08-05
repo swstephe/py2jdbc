@@ -73,4 +73,4 @@ if HAS_DERBY:
     CLASSPATH.append(path)
 CLASSPATH = CP_SEP.join(CLASSPATH)
 DRIVER = 'org.sqlite.JDBC'
-JAVA_OPTS = dict(classpath=CLASSPATH, verbose=('memory', 'gc'), check='jni')
+JAVA_OPTS = dict(classpath=CLASSPATH, verbose=('memory', 'gc')) # , check='jni')

@@ -75,6 +75,8 @@ def _test_field(id, typ, value, *desc):
         (field.upper(), desc[0], desc[1], None, desc[2], desc[3], True),
     )
     row = cu.fetchall()
+    if six.PY2 and hasattr(value, '__getitem__') and isinstance(value[0], int):
+        value = ''.join(map(chr, value))
     assert row == ((id, name, value),)
 
 
@@ -83,7 +85,10 @@ def test_bigint():
 
 
 def test_blob():
-    _test_field(3, 'blob', os.urandom(1024), py2jdbc.BLOB, MAX_INT, MAX_INT, 0)
+    value = os.urandom(1024)
+    if six.PY2:
+        value = map(ord, value)
+    _test_field(3, 'blob', value, py2jdbc.BLOB, MAX_INT, MAX_INT, 0)
 
 
 def test_boolean():

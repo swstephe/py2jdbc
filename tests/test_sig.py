@@ -189,10 +189,16 @@ def test_byte_array():
     assert ba.jtype == py2jdbc.jni.jbyte
     count = 10
     a = os.urandom(count)
+    if six.PY2:
+        a = map(ord, a)
     a1 = py2jdbc.jni.jbyte.__mul__(count)(*a)
     ja = _env.NewByteArray(count)
     _env.SetByteArrayRegion(ja, 0, count, a1)
+    if six.PY2:
+        a = ''.join(map(chr, a))
     assert ba.j2py(ja) == a
+    if six.PY2:
+        a = map(ord, a)
     j2 = ba.py2j(a)
     a2 = _env.GetByteArrayElements(j2, None)
     for i in range(count):
