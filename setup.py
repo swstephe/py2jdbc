@@ -7,7 +7,7 @@ from setuptools import setup
 
 setup(
     name='py2jdbc',
-    version='0.0.4',
+    version='0.0.5',
     license='BSD 2-Clause License',
     description="Python DBI interface to JDBC databases",
     long_description="""
