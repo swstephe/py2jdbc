@@ -190,7 +190,7 @@ def test_errors():
         assert mutf8_decode(bad_char, errors='replace') == six.u('\uFFFD')
     # Python 2 mutf8 will break into multiple sequences
     if six.PY3:
-        with pytest.raises(UnicodeEncodeError):
+        with pytest.raises(ValueError):
             assert mutf8_encode(mutf8_unichr(0x100000))
         assert mutf8_encode(mutf8_unichr(0x100000), errors='ignore') == six.b('')
         assert mutf8_encode(mutf8_unichr(0x100000), errors='replace') == six.b('?')
