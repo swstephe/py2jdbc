@@ -57,7 +57,7 @@ class DataType(object):
         raise NotImplementedError("DataType.get")
 
 
-
+# noinspection PyAbstractClass
 @datatypes.register
 class ARRAY(DataType):
     type_code = 2003
@@ -79,7 +79,6 @@ class BINARY(DataType):
     def get(self, rs, i):
         value = rs.getBytes(i)
         return None if rs.wasNull() else value
-
 
 
 @datatypes.register
@@ -127,6 +126,7 @@ class CLOB(DataType):
         return None if rs.wasNull() else value
 
 
+# noinspection PyAbstractClass
 @datatypes.register
 class DATALINK(DataType):
     type_code = 70
@@ -150,6 +150,7 @@ class DECIMAL(DataType):
         return None if rs.wasNull() else value
 
 
+# noinspection PyAbstractClass
 @datatypes.register
 class DISTINCT(DataType):
     type_code = 2001
@@ -182,6 +183,7 @@ class INTEGER(DataType):
         return None if rs.wasNull() else value
 
 
+# noinspection PyAbstractClass,PyPep8Naming
 @datatypes.register
 class JAVA_OBJECT(DataType):
     type_code = 2000
@@ -223,6 +225,7 @@ class NCHAR(DataType):
         return None if rs.wasNull() else value
 
 
+# noinspection PyAbstractClass
 @datatypes.register
 class NCLOB(DataType):
     type_code = 2011
@@ -254,6 +257,7 @@ class NVARCHAR(DataType):
         return None if rs.wasNull() else value
 
 
+# noinspection PyAbstractClass
 @datatypes.register
 class OTHER(DataType):
     type_code = 1111
@@ -268,16 +272,19 @@ class REAL(DataType):
         return None if rs.wasNull() else value
 
 
+# noinspection PyAbstractClass
 @datatypes.register
 class REF(DataType):
     type_code = 2006
 
 
+# noinspection PyAbstractClass,PyPep8Naming
 @datatypes.register
 class REF_CURSOR(DataType):
     type_code = 2012
 
 
+# noinspection PyAbstractClass
 @datatypes.register
 class ROWID(DataType):
     type_code = -8
@@ -292,11 +299,13 @@ class SMALLINT(DataType):
         return None if rs.wasNull() else value
 
 
+# noinspection PyAbstractClass
 @datatypes.register
 class SQLXML(DataType):
     type_code = 2009
 
 
+# noinspection PyAbstractClass
 @datatypes.register
 class STRUCT(DataType):
     type_code = 2002
@@ -311,6 +320,7 @@ class TIME(DataType):
         return None if rs.wasNull() else value.to_python()
 
 
+# noinspection PyAbstractClass,PyPep8Naming
 @datatypes.register
 class TIME_WITH_TIMEZONE(DataType):
     type_code = 2013
@@ -325,6 +335,7 @@ class TIMESTAMP(DataType):
         return None if rs.wasNull() else value.to_python()
 
 
+# noinspection PyAbstractClass,PyPep8Naming
 @datatypes.register
 class TIMESTAMP_WITH_TIMEZONE(DataType):
     type_code = 2014
@@ -339,6 +350,7 @@ class TINYINT(DataType):
         return None if rs.wasNull() else value
 
 
+# noinspection PyAbstractClass
 @datatypes.register
 class VARBINARY(DataType):
     type_code = -3
@@ -466,12 +478,16 @@ class Cursor(object):
         """
         env = get_env()
         meta = env.get('java.sql.DatabaseMetaData')
+        # noinspection PyPep8Naming,PyUnusedLocal
         Types = env.get('java.sql.Types')
         for func in self._conn.functions(functions=procname):
             name = func.function_name
             if func.function_schem:
                 name = func.function_schem + '.' + name
-            cols = self._conn.function_columns(functions=func.function_name, schemas=func.function_schem)
+            cols = self._conn.function_columns(
+                functions=func.function_name,
+                schemas=func.function_schem
+            )
             params = tuple(col for col in cols if col.column_type != meta.functionReturn)
             returns = any(col.column_type == meta.functionReturn for col in cols)
             break
@@ -480,7 +496,10 @@ class Cursor(object):
                 name = proc.procedure_name
                 if proc.procedure_schem:
                     name = proc.procedure_schem + '.' + name
-                cols = self._conn.procedure_columns(schemas=proc.procedure_schem, procedures=proc.procedure_name)
+                cols = self._conn.procedure_columns(
+                    schemas=proc.procedure_schem,
+                    procedures=proc.procedure_name
+                )
                 params = tuple(cols)
                 returns = False
                 break
@@ -521,7 +540,6 @@ class Cursor(object):
         elif len(results) == 1:
             return results[0]
         return results
-
 
     def close(self):
         """
@@ -605,7 +623,7 @@ class Cursor(object):
         funcs = tuple(_fetch_funcs(self._rs))
         return tuple(
             tuple(_fetch_row(self._rs, funcs))
-            for row in self._rs
+            for _ in self._rs
         )
 
     def fetchmany(self, size=None):
@@ -961,7 +979,6 @@ class Connection(object):
             )
             for _ in rs
         )
-
 
 
 def connect(*args, **kwargs):
