@@ -20,9 +20,9 @@ copyright = '2018, Scott Stephens'
 author = 'Scott Stephens'
 
 # The short X.Y version
-version = '0.0.1'
+version = '0.0.6'
 # The full version, including alpha/beta/rc tags
-release = '0.0.1dev3'
+release = '0.0.6dev3'
 
 
 # -- General configuration ---------------------------------------------------

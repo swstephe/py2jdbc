@@ -49,12 +49,7 @@ def find_libjvm():
     :return: a full path to a JVM dynamic link library or raise RuntimeError
         if not found.
     """
-    # first, try the ctypes utility
-    path = find_library('jvm')
-    if path:
-        return path
-
-    # try a PY2JDBC_JAVA_HOME environment variable
+    # first, try a PY2JDBC_JAVA_HOME environment variable
     py2jdbc_home = os.getenv('PY2JDBC_JAVA_HOME')
     if py2jdbc_home and os.path.exists(py2jdbc_home):
         path = find_libfile(py2jdbc_home)
@@ -75,8 +70,14 @@ def find_libjvm():
         if path:
             return path
 
+    # try the ctypes utility
+    path = find_library('jvm')
+    if path:
+        return path
+
+    # a search for the usual subjects
     if platform == 'darwin':
-        # I've been told this works on most iOS systems
+        # I've been told this works
         path = find_libfile('/System/Library/Frameworks/JavaVM.framework/Libraries')
         if path:
             return path

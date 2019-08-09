@@ -447,8 +447,8 @@ class JNIEnv(Structure):
 
         :param obj: a java.lang.Throwable object.
         :return: 0 on success; a negative value on failure.
-        :raises JavaException on exception
-            RuntimeError if exception couldn't be thrown
+        :raises: JavaException on exception
+                RuntimeError if exception couldn't be thrown
         """
         result = self.functions[0].Throw(self, obj)
         self.check_exception()

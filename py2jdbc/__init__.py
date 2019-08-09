@@ -137,4 +137,4 @@ __all__ = (
     'VARBINARY',
     'VARCHAR',
 )
-__version__ = version = '0.0.4'
+__version__ = version = '0.0.6'
